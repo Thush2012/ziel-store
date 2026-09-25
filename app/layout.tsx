@@ -13,6 +13,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
@@ -21,8 +22,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} min-h-screen w-full bg-slate-50 text-slate-900 antialiased overflow-x-hidden`}>
+    <html lang="en" className="overflow-x-hidden">
+      <body
+        className={`${inter.className} min-h-screen w-full max-w-full bg-slate-50 text-slate-900 antialiased overflow-x-hidden`}
+      >
         {children}
       </body>
     </html>

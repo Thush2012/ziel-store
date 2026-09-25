@@ -154,9 +154,8 @@ export default function Home() {
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
 
-  // --- LOCALSTORAGE PERSISTENCE HOOKS ---
+  // LocalStorage persistence hooks
   useEffect(() => {
-    // Load saved theme & cart from browser storage on mount
     const savedCart = localStorage.getItem('ziel_cart');
     if (savedCart) {
       try { setCart(JSON.parse(savedCart)); } catch (e) { console.error(e); }
@@ -169,12 +168,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // Persist cart updates to localStorage
     localStorage.setItem('ziel_cart', JSON.stringify(cart));
   }, [cart]);
 
   useEffect(() => {
-    // Persist theme choice to localStorage
     localStorage.setItem('ziel_theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
@@ -206,6 +203,18 @@ export default function Home() {
       return [...prevCart, { id: product.id, name: product.name, price: product.price, qty: qtyToAdd }];
     });
     setIsCartOpen(true);
+  };
+
+  const updateCartQty = (id: number, delta: number) => {
+    setCart((prevCart) =>
+      prevCart
+        .map((item) => (item.id === id ? { ...item, qty: item.qty + delta } : item))
+        .filter((item) => item.qty > 0)
+    );
+  };
+
+  const removeFromCart = (id: number) => {
+    setCart((prevCart) => prevCart.filter((item) => item.id !== id));
   };
 
   const handleAuthSubmit = (e: React.FormEvent) => {
@@ -271,99 +280,98 @@ export default function Home() {
 
   return (
     <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
-      {/* Header Bar */}
-      <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-6 sm:px-12 py-4 flex items-center justify-between`}>
-        {/* Brand Logo */}
-        <div className="flex items-center space-x-3">
-          <img 
-            src="/logo.png" 
-            alt="Ziel Store Logo" 
-            className="h-9 w-auto object-contain"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-            }}
-          />
-          <span className="text-xl font-medium tracking-[-0.04em] uppercase">
-            ZIEL<span className={`font-light ml-1 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>STORE</span>
-          </span>
-        </div>
+      
+      {/* FIXED HEADER: Responsive layout preventing overlap */}
+<header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3.5 flex items-center justify-between gap-2`}>
+  {/* Left: Brand Container (Strictly isolated) */}
+  <div className="flex items-center space-x-2 shrink-0">
+    <img 
+      src="/logo.png" 
+      alt="Ziel Store Logo" 
+      className="h-6 sm:h-8 w-auto object-contain"
+      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+    />
+    <span className="text-sm sm:text-lg font-bold tracking-[0.05em] uppercase whitespace-nowrap">
+      ZIEL<span className={`font-light ml-1 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>STORE</span>
+    </span>
+  </div>
 
-        {/* Center Navigation */}
-        <nav className={`hidden md:flex items-center space-x-10 text-xs font-medium uppercase tracking-widest ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
-          <a href="#works" className="hover:text-current transition-colors">Catalog</a>
-          <a href="#about" className="hover:text-current transition-colors">Craftsmanship</a>
-          <a href="#contact" className="hover:text-current transition-colors">Contact</a>
-        </nav>
+  {/* Center Navigation (Desktop Only) */}
+  <nav className={`hidden md:flex items-center space-x-10 text-xs font-medium uppercase tracking-widest ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
+    <a href="#works" className="hover:text-current transition-colors">Catalog</a>
+    <a href="#about" className="hover:text-current transition-colors">Craftsmanship</a>
+    <a href="#contact" className="hover:text-current transition-colors">Contact</a>
+  </nav>
 
-        {/* Right Header Actions */}
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            title="Toggle Theme"
-            className={`p-2.5 rounded-full border transition-all ${
-              isDarkMode 
-                ? 'bg-stone-800/80 border-stone-700 text-amber-300 hover:bg-stone-700' 
-                : 'bg-stone-200/60 border-stone-300/80 text-stone-700 hover:bg-stone-300'
-            }`}
-          >
-            {isDarkMode ? '☀️' : '🌙'}
-          </button>
+  {/* Right: Actions Group (Theme Toggle, Account, Bag grouped cleanly together) */}
+  <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
+    {/* Theme Toggle Button */}
+    <button
+      onClick={() => setIsDarkMode(!isDarkMode)}
+      title="Toggle Theme"
+      className={`p-1.5 sm:p-2 rounded-full border transition-all flex items-center justify-center shrink-0 ${
+        isDarkMode 
+          ? 'bg-stone-800 border-stone-700 text-amber-300 hover:bg-stone-700' 
+          : 'bg-stone-200/70 border-stone-300 text-stone-700 hover:bg-stone-300'
+      }`}
+    >
+      <span className="text-xs sm:text-sm leading-none">{isDarkMode ? '☀️' : '🌙'}</span>
+    </button>
 
-          {user ? (
-            <div className="flex items-center space-x-2">
-              <span className={`text-xs font-mono px-3 py-1.5 rounded-full border ${isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-stone-100'}`}>
-                👤 {user.name}
-              </span>
-              <button
-                onClick={handleLogout}
-                className="text-[10px] uppercase font-mono tracking-wider text-stone-400 hover:text-stone-600 underline"
-              >
-                Sign out
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setIsAuthOpen(true)}
-              className={`text-xs uppercase tracking-widest font-medium px-4 py-2 rounded-full border transition-all ${
-                isDarkMode 
-                  ? 'border-stone-700 hover:border-stone-500 text-stone-200' 
-                  : 'border-stone-300 hover:border-stone-400 text-stone-800'
-              }`}
-            >
-              Account
-            </button>
-          )}
+    {/* Account Button */}
+    {user ? (
+      <div className="flex items-center space-x-1">
+        <span className={`text-[10px] sm:text-xs font-mono px-2 py-1 sm:px-3 sm:py-1.5 rounded-full border max-w-[70px] sm:max-w-none truncate ${isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-stone-100'}`}>
+          👤 {user.name}
+        </span>
+        <button onClick={handleLogout} className="text-[9px] uppercase font-mono text-stone-400 hover:text-stone-600 underline px-1">
+          Exit
+        </button>
+      </div>
+    ) : (
+      <button
+        onClick={() => setIsAuthOpen(true)}
+        className={`text-[10px] sm:text-xs uppercase tracking-wider font-semibold px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full border transition-all ${
+          isDarkMode 
+            ? 'border-stone-700 hover:border-stone-500 text-stone-200' 
+            : 'border-stone-300 hover:border-stone-400 text-stone-800'
+        }`}
+      >
+        Account
+      </button>
+    )}
 
-          <button
-            onClick={() => setIsCartOpen(true)}
-            className={`group flex items-center space-x-3 text-xs font-medium uppercase tracking-widest px-5 py-2.5 rounded-full transition-all shadow-sm ${
-              isDarkMode 
-                ? 'bg-[#F0EFEA] text-[#141413] hover:bg-white' 
-                : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
-            }`}
-          >
-            <span>Bag</span>
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono transition-colors ${
-              isDarkMode ? 'bg-stone-300 text-stone-900' : 'bg-stone-700 text-[#FAF9F5]'
-            }`}>
-              {totalCartItems}
-            </span>
-          </button>
-        </div>
-      </header>
+    {/* Shopping Bag Button */}
+    <button
+      onClick={() => setIsCartOpen(true)}
+      className={`group flex items-center space-x-1.5 sm:space-x-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wider px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all shadow-sm ${
+        isDarkMode 
+          ? 'bg-[#F0EFEA] text-[#141413] hover:bg-white' 
+          : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
+      }`}
+    >
+      <span>Bag</span>
+      <span className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-mono transition-colors ${
+        isDarkMode ? 'bg-stone-300 text-stone-900' : 'bg-stone-700 text-[#FAF9F5]'
+      }`}>
+        {totalCartItems}
+      </span>
+    </button>
+  </div>
+</header>
 
       {/* Hero Showcase Header */}
-      <section className="px-6 sm:px-12 pt-20 pb-12 max-w-7xl mx-auto">
-        <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-4 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
+      <section className="px-6 sm:px-12 pt-12 sm:pt-20 pb-10 sm:pb-12 max-w-7xl mx-auto">
+        <p className={`text-[10px] sm:text-xs uppercase tracking-[0.25em] font-semibold mb-3 sm:mb-4 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
           Handcrafted Essentials & Fermentations
         </p>
-        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-light tracking-[-0.03em] leading-[1.08] max-w-4xl">
+        <h1 className="text-3xl sm:text-6xl lg:text-7xl font-light tracking-[-0.03em] leading-[1.1] max-w-4xl">
           Thoughtfully created products built with <span className={`italic font-normal ${isDarkMode ? 'text-stone-400' : 'text-stone-600'}`}>precision & care.</span>
         </h1>
       </section>
 
       {/* Category Pills & Search Input Bar */}
-      <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pb-10">
+      <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pb-8 sm:pb-10">
         <div className={`flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b pb-6 ${
           isDarkMode ? 'border-stone-800' : 'border-stone-200/80'
         }`}>
@@ -372,7 +380,7 @@ export default function Home() {
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`text-xs uppercase tracking-widest px-4 py-2 rounded-full transition-all ${
+                className={`text-[10px] sm:text-xs uppercase tracking-widest px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all ${
                   selectedCategory === cat ? pillActive : pillInactive
                 }`}
               >
@@ -473,18 +481,18 @@ export default function Home() {
         )}
       </section>
 
-      {/* --- CRAFTSMANSHIP & STORY SECTION (#about) --- */}
-      <section id="about" className={`py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800 bg-[#171615]' : 'border-stone-200/80 bg-[#F4F2EC]'}`}>
+      {/* Craftsmanship Section */}
+      <section id="about" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800 bg-[#171615]' : 'border-stone-200/80 bg-[#F4F2EC]'}`}>
         <div className="max-w-7xl mx-auto">
           <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
             Behind The Brand
           </p>
-          <h2 className="text-3xl sm:text-5xl font-light tracking-tight mb-12 max-w-3xl">
+          <h2 className="text-2xl sm:text-5xl font-light tracking-tight mb-10 sm:mb-12 max-w-3xl">
             Artisanal formulation meeting raw physical chemistry.
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 sm:gap-16">
-            <div className={`p-8 rounded-3xl border ${isDarkMode ? 'bg-stone-900/50 border-stone-800' : 'bg-[#FAF9F5] border-stone-200'}`}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-16">
+            <div className={`p-6 sm:p-8 rounded-3xl border ${isDarkMode ? 'bg-stone-900/50 border-stone-800' : 'bg-[#FAF9F5] border-stone-200'}`}>
               <div className="w-12 h-12 rounded-2xl bg-amber-900/10 text-amber-800 flex items-center justify-center text-xl font-mono mb-6">
                 🌴
               </div>
@@ -494,7 +502,7 @@ export default function Home() {
               </p>
             </div>
 
-            <div className={`p-8 rounded-3xl border ${isDarkMode ? 'bg-stone-900/50 border-stone-800' : 'bg-[#FAF9F5] border-stone-200'}`}>
+            <div className={`p-6 sm:p-8 rounded-3xl border ${isDarkMode ? 'bg-stone-900/50 border-stone-800' : 'bg-[#FAF9F5] border-stone-200'}`}>
               <div className="w-12 h-12 rounded-2xl bg-stone-800/10 text-stone-800 flex items-center justify-center text-xl font-mono mb-6">
                 🧼
               </div>
@@ -507,14 +515,14 @@ export default function Home() {
         </div>
       </section>
 
-      {/* --- CONTACT SECTION (#contact) --- */}
-      <section id="contact" className="py-20 px-6 sm:px-12 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+      {/* Contact Section */}
+      <section id="contact" className="py-16 sm:py-20 px-6 sm:px-12 max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
           <div>
             <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
               Get In Touch
             </p>
-            <h2 className="text-3xl sm:text-4xl font-light tracking-tight mb-4">
+            <h2 className="text-2xl sm:text-4xl font-light tracking-tight mb-4">
               Direct Inquiries & Custom Batch Orders
             </h2>
             <p className={`text-xs leading-relaxed max-w-md ${isDarkMode ? 'text-stone-400' : 'text-stone-600'}`}>
@@ -533,7 +541,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className={`p-8 rounded-3xl border ${modalBg}`}>
+          <div className={`p-6 sm:p-8 rounded-3xl border ${modalBg}`}>
             {contactSubmitted ? (
               <div className="py-12 text-center">
                 <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center text-xl mx-auto mb-3">
@@ -606,30 +614,30 @@ export default function Home() {
         </div>
       </section>
 
-      {/* --- PRODUCT DETAILS MODAL --- */}
+      {/* Product Details Modal */}
       {activeProduct && (
         <div 
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 transition-opacity"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 transition-opacity overflow-y-auto"
           onClick={handleCloseProduct}
         >
           <div 
-            className={`${modalBg} rounded-3xl max-w-3xl w-full overflow-hidden shadow-2xl flex flex-col md:flex-row relative border`}
+            className={`${modalBg} rounded-3xl max-w-3xl w-full overflow-hidden shadow-2xl flex flex-col md:flex-row relative border my-auto`}
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={handleCloseProduct}
-              className={`absolute top-5 right-5 z-20 w-9 h-9 rounded-full flex items-center justify-center text-sm transition-colors ${
+              className={`absolute top-4 right-4 z-20 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-sm transition-colors ${
                 isDarkMode ? 'bg-stone-800 text-stone-300 hover:bg-stone-700' : 'bg-stone-200/80 text-stone-700 hover:bg-stone-300'
               }`}
             >
               ✕
             </button>
 
-            <div className={`w-full md:w-1/2 ${isDarkMode ? activeProduct.colorBgDark : activeProduct.colorBgLight} p-8 flex items-center justify-center min-h-[280px] md:min-h-[420px]`}>
+            <div className={`w-full md:w-1/2 ${isDarkMode ? activeProduct.colorBgDark : activeProduct.colorBgLight} p-6 sm:p-8 flex items-center justify-center min-h-[220px] md:min-h-[420px]`}>
               <img
                 src={activeProduct.image}
                 alt={activeProduct.name}
-                className="max-h-[320px] w-auto object-contain drop-shadow-xl"
+                className="max-h-[240px] sm:max-h-[320px] w-auto object-contain drop-shadow-xl"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                 }}
@@ -653,14 +661,14 @@ export default function Home() {
                   </span>
                 </div>
 
-                <h2 className="text-2xl font-medium tracking-tight">
+                <h2 className="text-xl sm:text-2xl font-medium tracking-tight">
                   {activeProduct.name}
                 </h2>
                 <p className={`text-xs font-medium mt-1 ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
                   {activeProduct.tagline}
                 </p>
 
-                <div className="mt-4 text-2xl font-mono font-semibold">
+                <div className="mt-4 text-xl sm:text-2xl font-mono font-semibold">
                   ${activeProduct.price.toFixed(2)}
                   <span className={`text-xs font-sans font-normal ml-2 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>/ item</span>
                 </div>
@@ -672,13 +680,13 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className={`mt-8 border-t pt-5 ${isDarkMode ? 'border-stone-800' : 'border-stone-200/80'}`}>
+              <div className={`mt-6 sm:mt-8 border-t pt-4 sm:pt-5 ${isDarkMode ? 'border-stone-800' : 'border-stone-200/80'}`}>
                 <div className="flex items-center justify-between mb-4">
                   <span className={`text-xs uppercase font-medium tracking-wider ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
                     Select Quantity
                   </span>
 
-                  <div className={`flex items-center space-x-3 border rounded-full px-3 py-1.5 shadow-sm ${
+                  <div className={`flex items-center space-x-3 border rounded-full px-3 py-1 shadow-sm ${
                     isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-white'
                   }`}>
                     <button
@@ -705,16 +713,13 @@ export default function Home() {
                     handleCloseProduct();
                   }}
                   disabled={!activeProduct.isAvailable}
-                  className={`w-full py-4 rounded-xl text-xs uppercase tracking-widest font-medium transition-all flex items-center justify-between px-6 shadow-md ${
-                    isDarkMode 
-                      ? 'bg-stone-100 text-stone-900 hover:bg-white disabled:bg-stone-800 disabled:text-stone-600' 
-                      : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800 disabled:bg-stone-300'
+                  className={`w-full py-3.5 sm:py-4 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
+                    activeProduct.isAvailable
+                      ? isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
+                      : 'bg-stone-500 text-stone-300 cursor-not-allowed'
                   }`}
                 >
-                  <span>Add {modalQuantity} to Bag</span>
-                  <span className="font-mono font-bold">
-                    ${(activeProduct.price * modalQuantity).toFixed(2)}
-                  </span>
+                  {activeProduct.isAvailable ? `Add To Bag • $${(activeProduct.price * modalQuantity).toFixed(2)}` : 'Out of Stock'}
                 </button>
               </div>
             </div>
@@ -722,61 +727,129 @@ export default function Home() {
         </div>
       )}
 
-      {/* --- ACCOUNT / LOGIN MODAL --- */}
+      {/* Shopping Bag Drawer Overlay */}
+      {isCartOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end">
+          <div 
+            className="fixed inset-0" 
+            onClick={() => setIsCartOpen(false)} 
+          />
+          <div className={`relative z-10 w-full max-w-md h-full shadow-2xl flex flex-col justify-between ${modalBg}`}>
+            <div className={`p-6 border-b flex items-center justify-between ${isDarkMode ? 'border-stone-800' : 'border-stone-200'}`}>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-base font-medium uppercase tracking-wider">Shopping Bag</h3>
+                <span className="text-xs font-mono text-stone-400">({totalCartItems})</span>
+              </div>
+              <button
+                onClick={() => setIsCartOpen(false)}
+                className="text-stone-400 hover:text-stone-600 text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 space-y-4 divide-y divide-stone-200/20">
+              {cart.length === 0 ? (
+                <div className="py-16 text-center text-stone-400 text-xs font-mono">
+                  Your shopping bag is currently empty.
+                </div>
+              ) : (
+                cart.map((item) => (
+                  <div key={item.id} className="pt-4 first:pt-0 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-medium">{item.name}</h4>
+                      <p className="text-[10px] font-mono text-stone-400 mt-0.5">
+                        ${item.price.toFixed(2)} each
+                      </p>
+                      <button
+                        onClick={() => removeFromCart(item.id)}
+                        className="text-[9px] uppercase tracking-wider text-rose-500 hover:text-rose-700 mt-1"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    <div className="flex items-center space-x-4">
+                      <div className={`flex items-center space-x-2 border rounded-full px-2.5 py-0.5 text-xs font-mono ${
+                        isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-white'
+                      }`}>
+                        <button onClick={() => updateCartQty(item.id, -1)} className="hover:opacity-60 px-1">-</button>
+                        <span>{item.qty}</span>
+                        <button onClick={() => updateCartQty(item.id, 1)} className="hover:opacity-60 px-1">+</button>
+                      </div>
+                      <span className="text-xs font-mono font-semibold min-w-[50px] text-right">
+                        ${(item.price * item.qty).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {cart.length > 0 && (
+              <div className={`p-6 border-t space-y-4 ${isDarkMode ? 'border-stone-800 bg-stone-900/30' : 'border-stone-200 bg-stone-50/50'}`}>
+                <div className="space-y-1.5 text-xs font-mono">
+                  <div className="flex justify-between text-stone-400">
+                    <span>Subtotal</span>
+                    <span>${subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-stone-400">
+                    <span>Estimated Shipping</span>
+                    <span>${shippingFee.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-semibold pt-2 border-t border-stone-200/20 text-current">
+                    <span>Total</span>
+                    <span>${grandTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setIsCartOpen(false);
+                    setIsCheckoutOpen(true);
+                  }}
+                  className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
+                    isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
+                  }`}
+                >
+                  Proceed To Checkout
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Auth Modal (Sign In / Sign Up) */}
       {isAuthOpen && (
         <div 
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 transition-opacity"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => setIsAuthOpen(false)}
         >
           <div 
-            className={`${modalBg} rounded-3xl max-w-md w-full p-8 shadow-2xl relative border`}
+            className={`w-full max-w-sm p-6 sm:p-8 rounded-3xl shadow-2xl border ${modalBg}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={() => setIsAuthOpen(false)}
-              className={`absolute top-5 right-5 w-8 h-8 rounded-full flex items-center justify-center text-xs ${
-                isDarkMode ? 'bg-stone-800 text-stone-400' : 'bg-stone-200 text-stone-600'
-              }`}
-            >
-              ✕
-            </button>
-
-            <div className="flex border-b mb-6 pb-2 space-x-6">
-              <button
-                onClick={() => setAuthMode('signin')}
-                className={`text-sm uppercase tracking-wider font-medium pb-2 border-b-2 transition-all ${
-                  authMode === 'signin' 
-                    ? isDarkMode ? 'border-stone-100 text-stone-100' : 'border-stone-900 text-stone-900' 
-                    : 'border-transparent text-stone-400'
-                }`}
-              >
-                Sign In
-              </button>
-              <button
-                onClick={() => setAuthMode('signup')}
-                className={`text-sm uppercase tracking-wider font-medium pb-2 border-b-2 transition-all ${
-                  authMode === 'signup' 
-                    ? isDarkMode ? 'border-stone-100 text-stone-100' : 'border-stone-900 text-stone-900' 
-                    : 'border-transparent text-stone-400'
-                }`}
-              >
-                Create Account
-              </button>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-base font-medium uppercase tracking-wider">
+                {authMode === 'signin' ? 'Account Sign In' : 'Create Account'}
+              </h3>
+              <button onClick={() => setIsAuthOpen(false)} className="text-stone-400 hover:text-stone-600 text-sm">✕</button>
             </div>
 
             <form onSubmit={handleAuthSubmit} className="space-y-4">
               <div>
                 <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                  Email Address
+                  Email
                 </label>
                 <input
                   type="email"
                   required
+                  placeholder="your@email.com"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="name@example.com"
-                  className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none transition-colors ${
-                    isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100 focus:border-stone-500' : 'bg-white border-stone-300 text-stone-900 focus:border-stone-800'
+                  className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
+                    isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
                   }`}
                 />
               </div>
@@ -788,124 +861,54 @@ export default function Home() {
                 <input
                   type="password"
                   required
+                  placeholder="••••••••"
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="••••••••"
-                  className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none transition-colors ${
-                    isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100 focus:border-stone-500' : 'bg-white border-stone-300 text-stone-900 focus:border-stone-800'
+                  className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
+                    isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
                   }`}
                 />
               </div>
 
               <button
                 type="submit"
-                className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all mt-4 ${
+                className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
                   isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
                 }`}
               >
-                {authMode === 'signin' ? 'Sign In' : 'Create Account'}
+                {authMode === 'signin' ? 'Sign In' : 'Register'}
               </button>
             </form>
-          </div>
-        </div>
-      )}
 
-      {/* --- CART DRAWER --- */}
-      {isCartOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm transition-opacity">
-          <div className={`w-full max-w-md ${modalBg} h-full shadow-2xl p-8 flex flex-col justify-between border-l`}>
-            <div>
-              <div className={`flex items-center justify-between border-b pb-5 ${isDarkMode ? 'border-stone-800' : 'border-stone-200/80'}`}>
-                <h2 className="text-lg font-medium uppercase tracking-wider">
-                  Your Shopping Bag ({totalCartItems})
-                </h2>
-                <button
-                  onClick={() => setIsCartOpen(false)}
-                  className="text-stone-400 hover:text-current text-sm p-1"
-                >
-                  ✕ Close
-                </button>
-              </div>
-
-              {cart.length === 0 ? (
-                <div className="py-20 text-center text-stone-400 text-sm">
-                  Your bag is currently empty.
-                </div>
-              ) : (
-                <div className={`divide-y max-h-[55vh] overflow-y-auto my-4 pr-2 ${isDarkMode ? 'divide-stone-800' : 'divide-stone-200/60'}`}>
-                  {cart.map((item) => (
-                    <div key={item.id} className="py-4 flex justify-between items-center">
-                      <div>
-                        <h4 className="text-sm font-medium">{item.name}</h4>
-                        <p className="text-xs text-stone-400 font-mono mt-0.5">
-                          ${item.price.toFixed(2)} × {item.qty}
-                        </p>
-                      </div>
-                      <span className="text-sm font-mono font-medium">
-                        ${(item.price * item.qty).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className={`border-t pt-6 ${isDarkMode ? 'border-stone-800' : 'border-stone-200/80'}`}>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs uppercase tracking-widest text-stone-400">Subtotal</span>
-                <span className="text-sm font-mono font-medium">${subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between items-center mb-6">
-                <span className="text-xs uppercase tracking-widest text-stone-400">Est. Shipping</span>
-                <span className="text-sm font-mono font-medium">${shippingFee.toFixed(2)}</span>
-              </div>
+            <div className="mt-4 text-center">
               <button
-                disabled={cart.length === 0}
-                onClick={() => {
-                  setIsCartOpen(false);
-                  setCheckoutStep('details');
-                  setIsCheckoutOpen(true);
-                }}
-                className={`w-full py-4 rounded-xl text-xs uppercase tracking-widest font-medium transition-all ${
-                  isDarkMode 
-                    ? 'bg-stone-100 text-stone-900 hover:bg-white disabled:bg-stone-800 disabled:text-stone-600' 
-                    : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800 disabled:bg-stone-300'
-                }`}
+                type="button"
+                onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
+                className="text-[10px] uppercase tracking-wider text-stone-400 hover:text-stone-600 underline"
               >
-                Proceed to Checkout (${grandTotal.toFixed(2)})
+                {authMode === 'signin' ? "Don't have an account? Register" : 'Already have an account? Sign In'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* --- CHECKOUT MODAL & ORDER CONFIRMATION --- */}
+      {/* Checkout Modal */}
       {isCheckoutOpen && (
         <div 
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 transition-opacity overflow-y-auto"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
           onClick={() => setIsCheckoutOpen(false)}
         >
           <div 
-            className={`${modalBg} rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl relative border my-8`}
+            className={`w-full max-w-lg p-6 sm:p-8 rounded-3xl shadow-2xl border my-auto ${modalBg}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={() => setIsCheckoutOpen(false)}
-              className={`absolute top-5 right-5 w-8 h-8 rounded-full flex items-center justify-center text-xs ${
-                isDarkMode ? 'bg-stone-800 text-stone-400' : 'bg-stone-200 text-stone-600'
-              }`}
-            >
-              ✕
-            </button>
-
             {checkoutStep === 'details' ? (
-              <div>
-                <h2 className="text-xl font-medium uppercase tracking-wider mb-1">
-                  Checkout & Shipping
-                </h2>
-                <p className={`text-xs mb-6 ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
-                  Please enter your delivery address and payment preference.
-                </p>
+              <>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-base font-medium uppercase tracking-wider">Checkout & Shipping</h3>
+                  <button onClick={() => setIsCheckoutOpen(false)} className="text-stone-400 hover:text-stone-600 text-sm">✕</button>
+                </div>
 
                 <form onSubmit={handlePlaceOrder} className="space-y-4">
                   <div>
@@ -915,7 +918,7 @@ export default function Home() {
                     <input
                       type="text"
                       required
-                      placeholder="e.g. John Doe"
+                      placeholder="John Doe"
                       value={shippingForm.fullName}
                       onChange={(e) => setShippingForm({ ...shippingForm, fullName: e.target.value })}
                       className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
@@ -924,30 +927,46 @@ export default function Home() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                      Phone Number
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="e.g. +94 77 123 4567"
-                      value={shippingForm.phone}
-                      onChange={(e) => setShippingForm({ ...shippingForm, phone: e.target.value })}
-                      className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
-                        isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
-                      }`}
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
+                        Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="+94 77 123 4567"
+                        value={shippingForm.phone}
+                        onChange={(e) => setShippingForm({ ...shippingForm, phone: e.target.value })}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
+                          isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
+                        City
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={shippingForm.city}
+                        onChange={(e) => setShippingForm({ ...shippingForm, city: e.target.value })}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
+                          isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
+                        }`}
+                      />
+                    </div>
                   </div>
 
                   <div>
                     <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
                       Delivery Address
                     </label>
-                    <textarea
+                    <input
+                      type="text"
                       required
-                      rows={2}
-                      placeholder="Street address, house/apartment number..."
+                      placeholder="Street name, house number..."
                       value={shippingForm.address}
                       onChange={(e) => setShippingForm({ ...shippingForm, address: e.target.value })}
                       className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
@@ -958,57 +977,35 @@ export default function Home() {
 
                   <div>
                     <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                      City / Region
+                      Payment Method
                     </label>
-                    <input
-                      type="text"
-                      required
-                      value={shippingForm.city}
-                      onChange={(e) => setShippingForm({ ...shippingForm, city: e.target.value })}
+                    <select
+                      value={shippingForm.paymentMethod}
+                      onChange={(e) => setShippingForm({ ...shippingForm, paymentMethod: e.target.value })}
                       className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
                         isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
                       }`}
-                    />
+                    >
+                      <option value="cod">Cash on Delivery (COD)</option>
+                      <option value="card">Credit / Debit Card</option>
+                      <option value="bank">Direct Bank Transfer</option>
+                    </select>
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">
-                      Select Payment Method
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { id: 'cod', label: 'Cash on Delivery' },
-                        { id: 'card', label: 'Card Payment' },
-                        { id: 'bank', label: 'Bank Transfer' },
-                      ].map((method) => (
-                        <button
-                          key={method.id}
-                          type="button"
-                          onClick={() => setShippingForm({ ...shippingForm, paymentMethod: method.id })}
-                          className={`py-3 px-2 rounded-xl text-[10px] uppercase tracking-wider border font-medium transition-all ${
-                            shippingForm.paymentMethod === method.id
-                              ? isDarkMode ? 'bg-stone-100 text-stone-900 border-stone-100' : 'bg-stone-900 text-[#FAF9F5] border-stone-900'
-                              : isDarkMode ? 'border-stone-800 text-stone-400 hover:border-stone-700' : 'border-stone-200 text-stone-600 hover:border-stone-300'
-                          }`}
-                        >
-                          {method.label}
-                        </button>
-                      ))}
+                  <div className={`p-4 rounded-xl text-xs font-mono space-y-1.5 my-4 ${
+                    isDarkMode ? 'bg-stone-900/60 border border-stone-800' : 'bg-stone-100/80 border border-stone-200'
+                  }`}>
+                    <div className="flex justify-between text-stone-400">
+                      <span>Items ({totalCartItems})</span>
+                      <span>${subtotal.toFixed(2)}</span>
                     </div>
-                  </div>
-
-                  <div className={`p-4 rounded-xl border my-4 ${isDarkMode ? 'border-stone-800 bg-stone-900/50' : 'border-stone-200 bg-stone-100/60'}`}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-stone-400">Subtotal ({totalCartItems} items):</span>
-                      <span className="font-mono">${subtotal.toFixed(2)}</span>
+                    <div className="flex justify-between text-stone-400">
+                      <span>Shipping</span>
+                      <span>${shippingFee.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-xs mb-2">
-                      <span className="text-stone-400">Flat Shipping:</span>
-                      <span className="font-mono">${shippingFee.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm font-semibold border-t pt-2 border-stone-300/40">
-                      <span>Total Amount:</span>
-                      <span className="font-mono text-emerald-600">${grandTotal.toFixed(2)}</span>
+                    <div className="flex justify-between font-semibold pt-1 border-t border-stone-200/20 text-current">
+                      <span>Total Amount</span>
+                      <span>${grandTotal.toFixed(2)}</span>
                     </div>
                   </div>
 
@@ -1018,85 +1015,65 @@ export default function Home() {
                       isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
                     }`}
                   >
-                    Confirm & Place Order (${grandTotal.toFixed(2)})
+                    Confirm Order (${grandTotal.toFixed(2)})
                   </button>
                 </form>
-              </div>
+              </>
             ) : (
-              receipt && (
-                <div className="text-center py-4">
-                  <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
-                    ✓
-                  </div>
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-600 bg-emerald-100/60 px-3 py-1 rounded-md">
-                    Order Confirmed
-                  </span>
-                  <h2 className="text-2xl font-medium tracking-tight mt-3">
-                    Thank you for your order!
-                  </h2>
-                  <p className={`text-xs mt-1 ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
-                    Order Ref: <span className="font-mono font-semibold text-current">{receipt.orderId}</span>
-                  </p>
+              <div className="py-6 text-center">
+                <div className="w-14 h-14 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
+                  ✓
+                </div>
+                <h3 className="text-xl font-medium tracking-tight mb-1">Order Confirmed!</h3>
+                <p className="text-xs text-stone-400 font-mono mb-6">Receipt ID: {receipt?.orderId}</p>
 
-                  <div className={`my-6 text-left p-5 rounded-2xl border ${isDarkMode ? 'border-stone-800 bg-stone-900/50' : 'border-stone-200 bg-stone-100/50'}`}>
-                    <h4 className="text-xs uppercase tracking-wider font-semibold mb-3 border-b pb-2 border-stone-300/30">
-                      Order Summary
-                    </h4>
-                    <div className="divide-y divide-stone-300/20 max-h-36 overflow-y-auto mb-4">
-                      {receipt.items.map((item) => (
-                        <div key={item.id} className="py-2 flex justify-between text-xs">
-                          <span>{item.name} <span className="text-stone-400">x{item.qty}</span></span>
-                          <span className="font-mono">${(item.price * item.qty).toFixed(2)}</span>
+                {receipt && (
+                  <div className={`text-left p-4 rounded-2xl border text-xs font-mono space-y-2 mb-6 ${
+                    isDarkMode ? 'bg-stone-900/60 border-stone-800' : 'bg-stone-100/60 border-stone-200'
+                  }`}>
+                    <div className="border-b pb-2 mb-2 font-semibold">
+                      Recipient: {receipt.customerName}
+                    </div>
+                    <div>Address: {receipt.address}, {receipt.city}</div>
+                    <div>Phone: {receipt.phone}</div>
+                    <div>Payment: {receipt.paymentMethod}</div>
+                    <div className="border-t pt-2 mt-2 space-y-1">
+                      {receipt.items.map((it) => (
+                        <div key={it.id} className="flex justify-between text-stone-400">
+                          <span>{it.qty}x {it.name}</span>
+                          <span>${(it.price * it.qty).toFixed(2)}</span>
                         </div>
                       ))}
-                    </div>
-
-                    <div className="border-t border-stone-300/40 pt-3 text-xs space-y-1">
-                      <div className="flex justify-between text-stone-400">
-                        <span>Delivery to:</span>
-                        <span className="text-current font-medium">{receipt.customerName} ({receipt.city})</span>
-                      </div>
-                      <div className="flex justify-between text-stone-400">
-                        <span>Payment Method:</span>
-                        <span className="text-current font-medium">{receipt.paymentMethod}</span>
-                      </div>
-                      <div className="flex justify-between font-bold text-sm pt-2 text-emerald-600">
-                        <span>Total Paid:</span>
-                        <span className="font-mono">${receipt.total.toFixed(2)}</span>
+                      <div className="flex justify-between font-semibold text-current pt-1 border-t border-stone-200/20">
+                        <span>Total Paid</span>
+                        <span>${receipt.total.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
+                )}
 
-                  <button
-                    onClick={() => {
-                      setIsCheckoutOpen(false);
-                      setCheckoutStep('details');
-                    }}
-                    className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
-                      isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
-                    }`}
-                  >
-                    Back to Catalog
-                  </button>
-                </div>
-              )
+                <button
+                  onClick={() => {
+                    setIsCheckoutOpen(false);
+                    setCheckoutStep('details');
+                  }}
+                  className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
+                    isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
+                  }`}
+                >
+                  Return To Store
+                </button>
+              </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Footer */}
-      <footer className={`border-t py-12 px-6 sm:px-12 text-xs tracking-wider ${
-        isDarkMode ? 'border-stone-800 bg-[#0F0E0E] text-stone-500' : 'border-stone-200/80 bg-[#F5F3ED] text-stone-500'
+      {/* Minimal Footer */}
+      <footer className={`border-t py-12 px-6 sm:px-12 text-center text-xs font-mono ${
+        isDarkMode ? 'border-stone-800 text-stone-500' : 'border-stone-200/80 text-stone-400'
       }`}>
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div>© {new Date().getFullYear()} ZIEL STORE. All rights reserved.</div>
-          <div className="flex space-x-6 uppercase tracking-widest">
-            <a href="#" className="hover:text-current">Instagram</a>
-            <a href="#about" className="hover:text-current">Craftsmanship</a>
-            <a href="#contact" className="hover:text-current">Contact</a>
-          </div>
-        </div>
+        <p>© {new Date().getFullYear()} Ziel Store. Artisanal Fermentations & Handcrafted Formulations.</p>
       </footer>
     </main>
   );
