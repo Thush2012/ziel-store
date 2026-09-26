@@ -62,7 +62,6 @@ const CURRENCIES: Record<Currency, CurrencyConfig> = {
   GBP: { symbol: '£', rate: 0.78, decimals: 2 },
 };
 
-// Ziel Store Default / Fallback Product Data
 const INITIAL_PRODUCTS: Product[] = [
   {
     id: 1,
@@ -192,39 +191,37 @@ const FAQS = [
 ];
 
 export default function Home() {
-  // Theme state
   const [isDarkMode, setIsDarkMode] = useState(false);
-
-  // Dynamic Products State
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-
-  // Currency State
   const [currency, setCurrency] = useState<Currency>('USD');
 
-  // Search, Filter & Sort
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Works');
   const [sortBy, setSortBy] = useState<'default' | 'low-to-high' | 'high-to-low'>('default');
 
-  // Commerce states
   const [cart, setCart] = useState<{ id: number; name: string; price: number; qty: number }[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Modal states
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [modalQuantity, setModalQuantity] = useState<number>(1);
-
-  // FAQ Accordion State
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  // Supabase Auth States
+  // Authentication & OTP States
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [user, setUser] = useState<{ id: string; email: string; name: string } | null>(null);
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+
+  // Email Validation & Checkmark States
+  const [emailChecking, setEmailChecking] = useState(false);
+  const [emailAvailable, setEmailAvailable] = useState<boolean | null>(null);
+
+  // OTP Verification States
+  const [isOtpStep, setIsOtpStep] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
 
   // Order History States
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
@@ -243,11 +240,9 @@ export default function Home() {
   });
   const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
 
-  // Contact Form State
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
 
-  // Format price helper according to chosen currency
   const formatPrice = (amountInUsd: number) => {
     const { symbol, rate, decimals } = CURRENCIES[currency];
     const converted = amountInUsd * rate;
@@ -257,7 +252,37 @@ export default function Home() {
     })}`;
   };
 
-  // --- SUPABASE AUTH SESSION LISTENER ---
+  // Debounced Email Existence Check
+  useEffect(() => {
+    const checkEmail = async () => {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailInput.trim())) {
+        setEmailAvailable(null);
+        return;
+      }
+
+      setEmailChecking(true);
+      try {
+        const { data: exists, error } = await supabase.rpc('check_email_exists', {
+          check_email: emailInput.trim(),
+        });
+
+        if (!error) {
+          setEmailAvailable(Boolean(exists));
+        } else {
+          setEmailAvailable(null);
+        }
+      } catch {
+        setEmailAvailable(null);
+      } finally {
+        setEmailChecking(false);
+      }
+    };
+
+    const timer = setTimeout(checkEmail, 450);
+    return () => clearTimeout(timer);
+  }, [emailInput]);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -284,7 +309,6 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- FETCH PRODUCTS FROM SUPABASE ON MOUNT ---
   useEffect(() => {
     async function fetchSupabaseProducts() {
       try {
@@ -308,9 +332,7 @@ export default function Home() {
             aspect: 'aspect-[4/5]',
             colorBgLight: 'bg-[#EFECE6]',
             colorBgDark: 'bg-[#22211F]',
-            specs: [
-              { label: 'Stock', value: `${item.stock_qty || 0} units` },
-            ],
+            specs: [{ label: 'Stock', value: `${item.stock_qty || 0} units` }],
           }));
           setProducts(mapped);
         }
@@ -322,7 +344,6 @@ export default function Home() {
     fetchSupabaseProducts();
   }, []);
 
-  // Fetch Order History for Authenticated User
   const fetchUserOrders = async () => {
     if (!user) return;
     setOrdersLoading(true);
@@ -335,7 +356,6 @@ export default function Home() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Failed to fetch orders:', error);
         showNotification('Unable to fetch orders');
       } else if (data) {
         setUserOrders(data as PastOrder[]);
@@ -347,7 +367,6 @@ export default function Home() {
     }
   };
 
-  // LocalStorage persistence hooks
   useEffect(() => {
     const savedCart = localStorage.getItem('ziel_cart');
     if (savedCart) {
@@ -355,14 +374,10 @@ export default function Home() {
     }
 
     const savedTheme = localStorage.getItem('ziel_theme');
-    if (savedTheme) {
-      setIsDarkMode(savedTheme === 'dark');
-    }
+    if (savedTheme) setIsDarkMode(savedTheme === 'dark');
 
     const savedCurrency = localStorage.getItem('ziel_currency') as Currency;
-    if (savedCurrency && CURRENCIES[savedCurrency]) {
-      setCurrency(savedCurrency);
-    }
+    if (savedCurrency && CURRENCIES[savedCurrency]) setCurrency(savedCurrency);
   }, []);
 
   useEffect(() => {
@@ -382,7 +397,6 @@ export default function Home() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Filter & Sort products
   const filteredProducts = products.filter((product) => {
     const matchesCategory = selectedCategory === 'All Works' || product.category === selectedCategory;
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -397,10 +411,6 @@ export default function Home() {
   const handleOpenProduct = (product: Product) => {
     setActiveProduct(product);
     setModalQuantity(1);
-  };
-
-  const handleCloseProduct = () => {
-    setActiveProduct(null);
   };
 
   const addToCart = (product: Product, qtyToAdd: number = 1) => {
@@ -428,11 +438,7 @@ export default function Home() {
     setCart((prevCart) => prevCart.filter((item) => item.id !== id));
   };
 
-  const clearCart = () => {
-    setCart([]);
-  };
-
-  // Auth Handler
+  // Auth & OTP Handlers
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailInput || !passwordInput) return;
@@ -441,7 +447,7 @@ export default function Home() {
     try {
       if (authMode === 'signup') {
         const { error } = await supabase.auth.signUp({
-          email: emailInput,
+          email: emailInput.trim(),
           password: passwordInput,
           options: {
             data: { full_name: emailInput.split('@')[0] },
@@ -449,21 +455,19 @@ export default function Home() {
         });
 
         if (error) {
-          showNotification(`Sign Up Error: ${error.message}`);
+          showNotification(error.message);
         } else {
-          showNotification('Registration successful! You are signed in.');
-          setIsAuthOpen(false);
-          setEmailInput('');
-          setPasswordInput('');
+          setIsOtpStep(true);
+          showNotification('Verification code sent to your email!');
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
-          email: emailInput,
+          email: emailInput.trim(),
           password: passwordInput,
         });
 
         if (error) {
-          showNotification(`Sign In Error: ${error.message}`);
+          showNotification(error.message);
         } else {
           showNotification('Welcome back!');
           setIsAuthOpen(false);
@@ -478,6 +482,35 @@ export default function Home() {
     }
   };
 
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpCode.trim()) return;
+    setAuthLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: emailInput.trim(),
+        token: otpCode.trim(),
+        type: 'signup',
+      });
+
+      if (error) {
+        showNotification(error.message);
+      } else if (data.session) {
+        showNotification('Email verified! Account successfully created.');
+        setIsAuthOpen(false);
+        setIsOtpStep(false);
+        setOtpCode('');
+        setEmailInput('');
+        setPasswordInput('');
+      }
+    } catch (err: any) {
+      showNotification(err?.message || 'Verification failed');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -485,18 +518,11 @@ export default function Home() {
     showNotification('Signed out successfully');
   };
 
-  const handleContactSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setContactSubmitted(true);
-  };
-
-  // Calculations
   const totalCartItems = cart.reduce((acc, item) => acc + item.qty, 0);
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
   const shippingFee = subtotal > 0 ? 5.00 : 0.00;
   const grandTotal = subtotal + shippingFee;
 
-  // Save Order
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
@@ -523,7 +549,6 @@ export default function Home() {
         .single();
 
       if (orderError) {
-        console.error('Order saving error:', orderError);
         showNotification(`Order Error: ${orderError.message}`);
         return;
       }
@@ -535,14 +560,10 @@ export default function Home() {
           quantity: item.qty,
           unit_price: item.price,
         }));
-
-        const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
-        if (itemsError) {
-          console.error('Line items saving error:', itemsError);
-        }
+        await supabase.from('order_items').insert(orderItemsPayload);
       }
     } catch (err) {
-      console.error('Order submission failed:', err);
+      console.error(err);
     }
 
     const newReceipt: OrderReceipt = {
@@ -555,7 +576,7 @@ export default function Home() {
       address: shippingForm.address,
       city: shippingForm.city,
       phone: shippingForm.phone,
-      paymentMethod: 
+      paymentMethod:
         shippingForm.paymentMethod === 'cod' ? 'Cash on Delivery' :
         shippingForm.paymentMethod === 'card' ? 'Credit/Debit Card' : 'Direct Bank Transfer',
     };
@@ -575,8 +596,6 @@ export default function Home() {
 
   return (
     <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
-      
-      {/* Toast Alert */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 px-4 py-3 rounded-2xl shadow-xl text-xs font-medium tracking-wide flex items-center space-x-2 animate-bounce">
           <span>✨</span>
@@ -593,8 +612,6 @@ export default function Home() {
 
       {/* Header */}
       <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3 flex items-center justify-between gap-2`}>
-        
-        {/* Left: Logo */}
         <div className="flex items-center space-x-2 shrink-0">
           <img 
             src="/logo.png" 
@@ -607,7 +624,6 @@ export default function Home() {
           </span>
         </div>
 
-        {/* Center Nav */}
         <nav className={`hidden md:flex items-center space-x-10 text-xs font-medium uppercase tracking-widest ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
           <a href="#works" className="hover:text-current transition-colors">Catalog</a>
           <a href="#about" className="hover:text-current transition-colors">Craftsmanship</a>
@@ -615,9 +631,7 @@ export default function Home() {
           <a href="#contact" className="hover:text-current transition-colors">Contact</a>
         </nav>
 
-        {/* Right Actions */}
         <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
-          
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             title="Toggle Theme"
@@ -648,7 +662,10 @@ export default function Home() {
             </div>
           ) : (
             <button
-              onClick={() => setIsAuthOpen(true)}
+              onClick={() => {
+                setIsAuthOpen(true);
+                setIsOtpStep(false);
+              }}
               className={`text-[10px] sm:text-xs uppercase tracking-wider font-semibold px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full border transition-all ${
                 isDarkMode 
                   ? 'border-stone-700 hover:border-stone-500 text-stone-200' 
@@ -677,7 +694,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Hero Showcase */}
+      {/* Hero */}
       <section className="px-6 sm:px-12 pt-12 sm:pt-20 pb-10 sm:pb-12 max-w-7xl mx-auto">
         <p className={`text-[10px] sm:text-xs uppercase tracking-[0.25em] font-semibold mb-3 sm:mb-4 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
           Handcrafted Essentials & Fermentations
@@ -692,7 +709,6 @@ export default function Home() {
         <div className={`flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b pb-6 ${
           isDarkMode ? 'border-stone-800' : 'border-stone-200/80'
         }`}>
-          {/* Categories */}
           <div className="flex flex-wrap items-center gap-2">
             {CATEGORIES.map((cat) => (
               <button
@@ -707,9 +723,7 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Search, Currency & Sort Group */}
           <div className="flex flex-col sm:flex-row items-center gap-3">
-            {/* Search Input */}
             <div className="relative w-full sm:w-60">
               <input
                 type="text"
@@ -732,26 +746,21 @@ export default function Home() {
               )}
             </div>
 
-            {/* Currency Selector (Positioned Next to Search) */}
-            <div className="relative w-full sm:w-auto">
-              <select
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value as Currency)}
-                className={`w-full sm:w-auto px-4 py-2 rounded-full border text-xs font-mono font-medium focus:outline-none cursor-pointer transition-colors ${
-                  isDarkMode 
-                    ? 'bg-stone-900 border-stone-700 text-stone-300 hover:border-stone-600' 
-                    : 'bg-white border-stone-300 text-stone-700 hover:border-stone-400'
-                }`}
-                title="Select store currency"
-              >
-                <option value="USD">USD ($)</option>
-                <option value="LKR">LKR (Rs.)</option>
-                <option value="EUR">EUR (€)</option>
-                <option value="GBP">GBP (£)</option>
-              </select>
-            </div>
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value as Currency)}
+              className={`w-full sm:w-auto px-4 py-2 rounded-full border text-xs font-mono font-medium focus:outline-none cursor-pointer ${
+                isDarkMode 
+                  ? 'bg-stone-900 border-stone-700 text-stone-300' 
+                  : 'bg-white border-stone-300 text-stone-700'
+              }`}
+            >
+              <option value="USD">USD ($)</option>
+              <option value="LKR">LKR (Rs.)</option>
+              <option value="EUR">EUR (€)</option>
+              <option value="GBP">GBP (£)</option>
+            </select>
 
-            {/* Price Sort Dropdown */}
             <select
               value={sortBy}
               onChange={(e: any) => setSortBy(e.target.value)}
@@ -772,12 +781,6 @@ export default function Home() {
         {filteredProducts.length === 0 ? (
           <div className="py-20 text-center">
             <p className="text-stone-400 text-sm mb-4">No products found matching "{searchQuery}".</p>
-            <button
-              onClick={() => { setSearchQuery(''); setSelectedCategory('All Works'); }}
-              className="text-xs uppercase font-mono tracking-wider underline text-stone-500 hover:text-current"
-            >
-              Reset Filters
-            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-12">
@@ -825,9 +828,7 @@ export default function Home() {
 
                 <div className="mt-4 px-1 flex justify-between items-baseline">
                   <div>
-                    <h3 className="text-base font-medium transition-colors">
-                      {product.name}
-                    </h3>
+                    <h3 className="text-base font-medium transition-colors">{product.name}</h3>
                     <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
                       {product.tagline}
                     </p>
@@ -839,7 +840,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* Craftsmanship Section */}
+      {/* Craftsmanship */}
       <section id="about" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800 bg-[#171615]' : 'border-stone-200/80 bg-[#F4F2EC]'}`}>
         <div className="max-w-7xl mx-auto">
           <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
@@ -851,45 +852,33 @@ export default function Home() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-16">
             <div className={`p-6 sm:p-8 rounded-3xl border ${isDarkMode ? 'bg-stone-900/50 border-stone-800' : 'bg-[#FAF9F5] border-stone-200'}`}>
-              <div className="w-12 h-12 rounded-2xl bg-amber-900/10 text-amber-800 flex items-center justify-center text-xl font-mono mb-6">
-                🌴
-              </div>
+              <div className="w-12 h-12 rounded-2xl bg-amber-900/10 text-amber-800 flex items-center justify-center text-xl font-mono mb-6">🌴</div>
               <h3 className="text-xl font-medium mb-3">Natural King Coconut Fermentation</h3>
               <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-stone-400' : 'text-stone-600'}`}>
-                Ziel King Coconut Wine is born from small-batch natural fermentations of pure, unrefined king coconut nectar. Through meticulous temperature control and physical chemistry precision, we transform native botanical sugars into a refined golden wine with natural floral warmth and balanced acidity.
+                Ziel King Coconut Wine is born from small-batch natural fermentations of pure, unrefined king coconut nectar.
               </p>
             </div>
 
             <div className={`p-6 sm:p-8 rounded-3xl border ${isDarkMode ? 'bg-stone-900/50 border-stone-800' : 'bg-[#FAF9F5] border-stone-200'}`}>
-              <div className="w-12 h-12 rounded-2xl bg-stone-800/10 text-stone-800 flex items-center justify-center text-xl font-mono mb-6">
-                🧼
-              </div>
+              <div className="w-12 h-12 rounded-2xl bg-stone-800/10 text-stone-800 flex items-center justify-center text-xl font-mono mb-6">🧼</div>
               <h3 className="text-xl font-medium mb-3">Ziel Grit Mechanics Formula</h3>
               <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-stone-400' : 'text-stone-600'}`}>
-                Engineered for hands that build, repair, and create. Ziel Grit combines cold-process saponified lipid bars with fine volcanic pumice and citrus oils. Designed specifically to dissolve stubborn industrial grease, heavy motor oil, rust particles, and printer ink without harsh synthetic detergents.
+                Engineered for hands that build, repair, and create with fine volcanic pumice and citrus oils.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* FAQ Section */}
+      {/* FAQ */}
       <section id="faq" className="py-16 sm:py-20 px-6 sm:px-12 max-w-5xl mx-auto">
         <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
           Answers & Information
         </p>
-        <h2 className="text-2xl sm:text-4xl font-light tracking-tight mb-8">
-          Frequently Asked Questions
-        </h2>
-
+        <h2 className="text-2xl sm:text-4xl font-light tracking-tight mb-8">Frequently Asked Questions</h2>
         <div className="space-y-4">
           {FAQS.map((faq, idx) => (
-            <div
-              key={idx}
-              className={`border rounded-2xl overflow-hidden transition-colors ${
-                isDarkMode ? 'border-stone-800 bg-stone-900/30' : 'border-stone-200 bg-white'
-              }`}
-            >
+            <div key={idx} className={`border rounded-2xl overflow-hidden transition-colors ${isDarkMode ? 'border-stone-800 bg-stone-900/30' : 'border-stone-200 bg-white'}`}>
               <button
                 onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
                 className="w-full px-6 py-4 text-left flex justify-between items-center text-xs sm:text-sm font-medium"
@@ -897,11 +886,8 @@ export default function Home() {
                 <span>{faq.q}</span>
                 <span className="text-lg leading-none">{openFaq === idx ? '−' : '+'}</span>
               </button>
-
               {openFaq === idx && (
-                <div className={`px-6 pb-4 text-xs leading-relaxed border-t pt-3 ${
-                  isDarkMode ? 'border-stone-800 text-stone-400' : 'border-stone-100 text-stone-600'
-                }`}>
+                <div className={`px-6 pb-4 text-xs leading-relaxed border-t pt-3 ${isDarkMode ? 'border-stone-800 text-stone-400' : 'border-stone-100 text-stone-600'}`}>
                   {faq.a}
                 </div>
               )}
@@ -910,86 +896,42 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Contact Section */}
-      <section id="contact" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800' : 'border-stone-200'}`}>
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
-          <div>
-            <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
-              Get In Touch
-            </p>
-            <h2 className="text-2xl sm:text-4xl font-light tracking-tight mb-4">
-              Direct Inquiries & Custom Batch Orders
-            </h2>
-            <p className={`text-xs leading-relaxed max-w-md ${isDarkMode ? 'text-stone-400' : 'text-stone-600'}`}>
-              Have questions regarding bulk artisanal wine reservations, wholesale bar stock, or private branding requests? Send us a direct note.
-            </p>
-
-            <div className="mt-8 space-y-3 text-xs font-mono">
-              <div className="flex items-center space-x-3">
-                <span className="text-stone-400">Location:</span>
-                <span>Colombo & Katunayake, Sri Lanka</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <span className="text-stone-400">Email:</span>
-                <span>inquiries@zielstore.com</span>
-              </div>
+      {/* Auth & OTP Modal */}
+      {isAuthOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setIsAuthOpen(false)}
+        >
+          <div 
+            className={`w-full max-w-sm p-6 sm:p-8 rounded-3xl shadow-2xl border ${modalBg}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-base font-medium uppercase tracking-wider">
+                {isOtpStep ? 'Verify Email Code' : authMode === 'signin' ? 'Account Sign In' : 'Create Account'}
+              </h3>
+              <button onClick={() => setIsAuthOpen(false)} className="text-stone-400 hover:text-stone-600 text-sm">✕</button>
             </div>
-          </div>
 
-          <div className={`p-6 sm:p-8 rounded-3xl border ${modalBg}`}>
-            {contactSubmitted ? (
-              <div className="py-12 text-center">
-                <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center text-xl mx-auto mb-3">
-                  ✓
-                </div>
-                <h4 className="text-lg font-medium">Message Received</h4>
-                <p className="text-xs text-stone-400 mt-1">Thank you. The Ziel team will respond shortly.</p>
-              </div>
-            ) : (
-              <form onSubmit={handleContactSubmit} className="space-y-4">
+            {isOtpStep ? (
+              /* OTP Form */
+              <form onSubmit={handleVerifyOtp} className="space-y-4">
+                <p className="text-xs text-stone-400 leading-relaxed">
+                  We've sent a 6-digit confirmation code to <span className="font-semibold text-current">{emailInput}</span>.
+                </p>
+
                 <div>
                   <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                    Your Name
+                    Enter OTP Code
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="John Doe"
-                    value={contactForm.name}
-                    onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
-                    className={`w-full px-4 py-3 rounded-xl border text-xs focus:outline-none ${
-                      isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="name@example.com"
-                    value={contactForm.email}
-                    onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-                    className={`w-full px-4 py-3 rounded-xl border text-xs focus:outline-none ${
-                      isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                    Message
-                  </label>
-                  <textarea
-                    required
-                    rows={4}
-                    placeholder="How can we help you?"
-                    value={contactForm.message}
-                    onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
-                    className={`w-full px-4 py-3 rounded-xl border text-xs focus:outline-none ${
+                    maxLength={6}
+                    placeholder="123456"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    className={`w-full px-4 py-2.5 rounded-xl border text-sm font-mono tracking-widest text-center focus:outline-none ${
                       isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
                     }`}
                   />
@@ -997,136 +939,116 @@ export default function Home() {
 
                 <button
                   type="submit"
-                  className={`w-full py-4 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
+                  disabled={authLoading}
+                  className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
                     isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
-                  }`}
+                  } ${authLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  Send Message
+                  {authLoading ? 'Verifying...' : 'Verify & Complete'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsOtpStep(false)}
+                  className="w-full text-center text-[10px] uppercase tracking-wider text-stone-400 hover:text-stone-600 underline pt-2"
+                >
+                  ← Edit Email or Password
                 </button>
               </form>
-            )}
-          </div>
-        </div>
-      </section>
+            ) : (
+              /* Sign In / Sign Up Form */
+              <form onSubmit={handleAuthSubmit} className="space-y-4">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold">
+                      Email Address
+                    </label>
+                    {/* Live Availability Status */}
+                    {emailChecking ? (
+                      <span className="text-[10px] text-stone-400">checking...</span>
+                    ) : emailAvailable === true ? (
+                      authMode === 'signin' ? (
+                        <span className="text-[11px] text-emerald-500 font-bold flex items-center gap-0.5">
+                          ✓ Account Found
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-amber-500">Email already registered</span>
+                      )
+                    ) : emailAvailable === false ? (
+                      authMode === 'signup' ? (
+                        <span className="text-[11px] text-emerald-500 font-bold flex items-center gap-0.5">
+                          ✓ Available
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-stone-400">No account with this email</span>
+                      )
+                    ) : null}
+                  </div>
 
-      {/* Product Details Modal */}
-      {activeProduct && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 transition-opacity overflow-y-auto"
-          onClick={handleCloseProduct}
-        >
-          <div 
-            className={`${modalBg} rounded-3xl max-w-3xl w-full overflow-hidden shadow-2xl flex flex-col md:flex-row relative border my-auto`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={handleCloseProduct}
-              className={`absolute top-4 right-4 z-20 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-sm transition-colors ${
-                isDarkMode ? 'bg-stone-800 text-stone-300 hover:bg-stone-700' : 'bg-stone-200/80 text-stone-700 hover:bg-stone-300'
-              }`}
-            >
-              ✕
-            </button>
-
-            <div className={`w-full md:w-1/2 ${isDarkMode ? activeProduct.colorBgDark : activeProduct.colorBgLight} p-6 sm:p-8 flex items-center justify-center min-h-[220px] md:min-h-[420px]`}>
-              <img
-                src={activeProduct.image}
-                alt={activeProduct.name}
-                className="max-h-[240px] sm:max-h-[320px] w-auto object-contain drop-shadow-xl"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            </div>
-
-            <div className="w-full md:w-1/2 p-6 sm:p-8 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center space-x-3 mb-3">
-                  <span className={`text-[10px] uppercase font-mono tracking-widest px-2.5 py-1 rounded-md ${
-                    isDarkMode ? 'bg-stone-800 text-stone-300' : 'bg-stone-200/60 text-stone-600'
-                  }`}>
-                    {activeProduct.category}
-                  </span>
-                  <span className={`text-[10px] uppercase font-mono tracking-widest px-2.5 py-1 rounded-md ${
-                    activeProduct.isAvailable
-                      ? isDarkMode ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-emerald-100 text-emerald-800'
-                      : isDarkMode ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-rose-100 text-rose-800'
-                  }`}>
-                    {activeProduct.isAvailable ? 'In Stock' : 'Out of Stock'}
-                  </span>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      required
+                      placeholder="your@email.com"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      className={`w-full px-4 py-2.5 pr-9 rounded-xl border text-xs focus:outline-none ${
+                        isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
+                      }`}
+                    />
+                    {/* Inline Checkmark Icon */}
+                    {((authMode === 'signin' && emailAvailable === true) || (authMode === 'signup' && emailAvailable === false)) && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500 font-bold text-sm">
+                        ✓
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <h2 className="text-xl sm:text-2xl font-medium tracking-tight">
-                  {activeProduct.name}
-                </h2>
-                <p className={`text-xs font-medium mt-1 ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
-                  {activeProduct.tagline}
-                </p>
-
-                <div className="mt-4 text-xl sm:text-2xl font-mono font-semibold">
-                  {formatPrice(activeProduct.price)}
-                  <span className={`text-xs font-sans font-normal ml-2 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>/ item</span>
-                </div>
-
-                <p className={`mt-4 text-xs leading-relaxed border-t pt-4 ${
-                  isDarkMode ? 'border-stone-800 text-stone-300' : 'border-stone-200/80 text-stone-600'
-                }`}>
-                  {activeProduct.description}
-                </p>
-
-                {activeProduct.specs && activeProduct.specs.length > 0 && (
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-[10px] font-mono border-t pt-3 border-stone-200/20">
-                    {activeProduct.specs.map((s, i) => (
-                      <div key={i} className="flex flex-col">
-                        <span className="text-stone-400 uppercase">{s.label}</span>
-                        <span className="font-semibold">{s.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className={`mt-6 sm:mt-8 border-t pt-4 sm:pt-5 ${isDarkMode ? 'border-stone-800' : 'border-stone-200/80'}`}>
-                <div className="flex items-center justify-between mb-4">
-                  <span className={`text-xs uppercase font-medium tracking-wider ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
-                    Select Quantity
-                  </span>
-
-                  <div className={`flex items-center space-x-3 border rounded-full px-3 py-1 shadow-sm ${
-                    isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-white'
-                  }`}>
-                    <button
-                      onClick={() => setModalQuantity((q) => Math.max(1, q - 1))}
-                      className="hover:opacity-60 text-sm font-bold w-5 h-5 flex items-center justify-center"
-                    >
-                      -
-                    </button>
-                    <span className="text-sm font-mono font-medium min-w-[20px] text-center">
-                      {modalQuantity}
-                    </span>
-                    <button
-                      onClick={() => setModalQuantity((q) => q + 1)}
-                      className="hover:opacity-60 text-sm font-bold w-5 h-5 flex items-center justify-center"
-                    >
-                      +
-                    </button>
-                  </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
+                      isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
+                    }`}
+                  />
                 </div>
 
                 <button
-                  onClick={() => {
-                    addToCart(activeProduct, modalQuantity);
-                    handleCloseProduct();
-                  }}
-                  disabled={!activeProduct.isAvailable}
-                  className={`w-full py-3.5 sm:py-4 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
-                    activeProduct.isAvailable
-                      ? isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
-                      : 'bg-stone-500 text-stone-300 cursor-not-allowed'
-                  }`}
+                  type="submit"
+                  disabled={authLoading}
+                  className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
+                    isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
+                  } ${authLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  {activeProduct.isAvailable ? `Add To Bag • ${formatPrice(activeProduct.price * modalQuantity)}` : 'Out of Stock'}
+                  {authLoading
+                    ? 'Processing...'
+                    : authMode === 'signin'
+                    ? 'Sign In'
+                    : 'Register & Send OTP'}
                 </button>
-              </div>
-            </div>
+
+                <div className="mt-4 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode(authMode === 'signin' ? 'signup' : 'signin');
+                      setEmailAvailable(null);
+                    }}
+                    className="text-[10px] uppercase tracking-wider text-stone-400 hover:text-stone-600 underline"
+                  >
+                    {authMode === 'signin' ? "Don't have an account? Register" : 'Already have an account? Sign In'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -1134,32 +1056,14 @@ export default function Home() {
       {/* Shopping Bag Drawer */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end">
-          <div 
-            className="fixed inset-0" 
-            onClick={() => setIsCartOpen(false)} 
-          />
+          <div className="fixed inset-0" onClick={() => setIsCartOpen(false)} />
           <div className={`relative z-10 w-full max-w-md h-full shadow-2xl flex flex-col justify-between ${modalBg}`}>
             <div className={`p-6 border-b flex items-center justify-between ${isDarkMode ? 'border-stone-800' : 'border-stone-200'}`}>
               <div className="flex items-center space-x-2">
                 <h3 className="text-base font-medium uppercase tracking-wider">Shopping Bag</h3>
                 <span className="text-xs font-mono text-stone-400">({totalCartItems})</span>
               </div>
-              <div className="flex items-center space-x-3">
-                {cart.length > 0 && (
-                  <button
-                    onClick={clearCart}
-                    className="text-[10px] uppercase tracking-wider text-rose-500 hover:text-rose-700 underline"
-                  >
-                    Clear All
-                  </button>
-                )}
-                <button
-                  onClick={() => setIsCartOpen(false)}
-                  className="text-stone-400 hover:text-stone-600 text-lg"
-                >
-                  ✕
-                </button>
-              </div>
+              <button onClick={() => setIsCartOpen(false)} className="text-stone-400 hover:text-stone-600 text-lg">✕</button>
             </div>
 
             <div className="p-6 overflow-y-auto flex-1 space-y-4 divide-y divide-stone-200/20">
@@ -1173,39 +1077,22 @@ export default function Home() {
                   <div key={item.id} className="pt-4 first:pt-0 flex items-center justify-between gap-2">
                     <div className="flex-1 pr-2">
                       <h4 className="text-xs font-medium">{item.name}</h4>
-                      <p className="text-[10px] font-mono text-stone-400 mt-0.5">
-                        {formatPrice(item.price)} each
-                      </p>
+                      <p className="text-[10px] font-mono text-stone-400 mt-0.5">{formatPrice(item.price)} each</p>
                       <button
                         onClick={() => removeFromCart(item.id)}
-                        className="text-[9px] uppercase tracking-wider font-semibold text-rose-500 hover:text-rose-700 mt-1.5 flex items-center gap-1 transition-colors"
+                        className="text-[9px] uppercase tracking-wider font-semibold text-rose-500 hover:text-rose-700 mt-1.5 flex items-center gap-1"
                       >
                         <span>🗑</span> Remove Item
                       </button>
                     </div>
 
                     <div className="flex items-center space-x-3">
-                      <div className={`flex items-center space-x-2 border rounded-full px-2.5 py-1 text-xs font-mono ${
-                        isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-white'
-                      }`}>
-                        <button 
-                          onClick={() => updateCartQty(item.id, -1)} 
-                          className="hover:text-rose-500 font-bold px-1 transition-colors"
-                        >
-                          -
-                        </button>
+                      <div className={`flex items-center space-x-2 border rounded-full px-2.5 py-1 text-xs font-mono ${isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-white'}`}>
+                        <button onClick={() => updateCartQty(item.id, -1)} className="hover:text-rose-500 font-bold px-1">-</button>
                         <span className="w-4 text-center font-semibold">{item.qty}</span>
-                        <button 
-                          onClick={() => updateCartQty(item.id, 1)} 
-                          className="hover:opacity-60 font-bold px-1 transition-colors"
-                        >
-                          +
-                        </button>
+                        <button onClick={() => updateCartQty(item.id, 1)} className="hover:opacity-60 font-bold px-1">+</button>
                       </div>
-
-                      <span className="text-xs font-mono font-semibold min-w-[55px] text-right">
-                        {formatPrice(item.price * item.qty)}
-                      </span>
+                      <span className="text-xs font-mono font-semibold min-w-[55px] text-right">{formatPrice(item.price * item.qty)}</span>
                     </div>
                   </div>
                 ))
@@ -1230,13 +1117,8 @@ export default function Home() {
                 </div>
 
                 <button
-                  onClick={() => {
-                    setIsCartOpen(false);
-                    setIsCheckoutOpen(true);
-                  }}
-                  className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
-                    isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
-                  }`}
+                  onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }}
+                  className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'}`}
                 >
                   Proceed To Checkout
                 </button>
@@ -1274,24 +1156,17 @@ export default function Home() {
             ) : (
               <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
                 {userOrders.map((ord) => (
-                  <div 
-                    key={ord.id} 
-                    className={`p-4 rounded-2xl border text-xs font-mono space-y-2 ${
-                      isDarkMode ? 'bg-stone-900/60 border-stone-800' : 'bg-stone-100/60 border-stone-200'
-                    }`}
-                  >
+                  <div key={ord.id} className={`p-4 rounded-2xl border text-xs font-mono space-y-2 ${isDarkMode ? 'bg-stone-900/60 border-stone-800' : 'bg-stone-100/60 border-stone-200'}`}>
                     <div className="flex justify-between items-center border-b pb-2 border-stone-200/20">
                       <span className="font-bold text-sm tracking-wider">{ord.order_number}</span>
                       <span className="text-[10px] text-stone-400">
                         {ord.created_at ? new Date(ord.created_at).toLocaleDateString() : 'Recent'}
                       </span>
                     </div>
-
                     <div className="grid grid-cols-2 gap-2 text-[11px] text-stone-400">
                       <div><span className="text-stone-500">Destination:</span> {ord.city}</div>
                       <div><span className="text-stone-500">Payment:</span> {ord.payment_method.toUpperCase()}</div>
                     </div>
-
                     <div className="flex justify-between items-baseline pt-2 border-t border-stone-200/20 font-semibold text-current">
                       <span>Total Billed</span>
                       <span className="text-sm font-bold">{formatPrice(Number(ord.total_amount))}</span>
@@ -1304,75 +1179,73 @@ export default function Home() {
         </div>
       )}
 
-      {/* Supabase Auth Modal */}
-      {isAuthOpen && (
+      {/* Product Details Modal */}
+      {activeProduct && (
         <div 
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setIsAuthOpen(false)}
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 transition-opacity overflow-y-auto"
+          onClick={() => setActiveProduct(null)}
         >
           <div 
-            className={`w-full max-w-sm p-6 sm:p-8 rounded-3xl shadow-2xl border ${modalBg}`}
+            className={`${modalBg} rounded-3xl max-w-3xl w-full overflow-hidden shadow-2xl flex flex-col md:flex-row relative border my-auto`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-base font-medium uppercase tracking-wider">
-                {authMode === 'signin' ? 'Account Sign In' : 'Create Account'}
-              </h3>
-              <button onClick={() => setIsAuthOpen(false)} className="text-stone-400 hover:text-stone-600 text-sm">✕</button>
+            <button
+              onClick={() => setActiveProduct(null)}
+              className={`absolute top-4 right-4 z-20 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-sm transition-colors ${isDarkMode ? 'bg-stone-800 text-stone-300 hover:bg-stone-700' : 'bg-stone-200/80 text-stone-700 hover:bg-stone-300'}`}
+            >
+              ✕
+            </button>
+
+            <div className={`w-full md:w-1/2 ${isDarkMode ? activeProduct.colorBgDark : activeProduct.colorBgLight} p-6 sm:p-8 flex items-center justify-center min-h-[220px] md:min-h-[420px]`}>
+              <img
+                src={activeProduct.image}
+                alt={activeProduct.name}
+                className="max-h-[240px] sm:max-h-[320px] w-auto object-contain drop-shadow-xl"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
             </div>
 
-            <form onSubmit={handleAuthSubmit} className="space-y-4">
+            <div className="w-full md:w-1/2 p-6 sm:p-8 flex flex-col justify-between">
               <div>
-                <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="your@email.com"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
-                    isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
-                  }`}
-                />
+                <div className="flex items-center space-x-3 mb-3">
+                  <span className={`text-[10px] uppercase font-mono tracking-widest px-2.5 py-1 rounded-md ${isDarkMode ? 'bg-stone-800 text-stone-300' : 'bg-stone-200/60 text-stone-600'}`}>
+                    {activeProduct.category}
+                  </span>
+                  <span className={`text-[10px] uppercase font-mono tracking-widest px-2.5 py-1 rounded-md ${activeProduct.isAvailable ? isDarkMode ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-emerald-100 text-emerald-800' : isDarkMode ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-rose-100 text-rose-800'}`}>
+                    {activeProduct.isAvailable ? 'In Stock' : 'Out of Stock'}
+                  </span>
+                </div>
+
+                <h2 className="text-xl sm:text-2xl font-medium tracking-tight">{activeProduct.name}</h2>
+                <p className={`text-xs font-medium mt-1 ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>{activeProduct.tagline}</p>
+                <div className="mt-4 text-xl sm:text-2xl font-mono font-semibold">
+                  {formatPrice(activeProduct.price)}
+                  <span className={`text-xs font-sans font-normal ml-2 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>/ item</span>
+                </div>
+                <p className={`mt-4 text-xs leading-relaxed border-t pt-4 ${isDarkMode ? 'border-stone-800 text-stone-300' : 'border-stone-200/80 text-stone-600'}`}>{activeProduct.description}</p>
               </div>
 
-              <div>
-                <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
-                    isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
-                  }`}
-                />
+              <div className={`mt-6 sm:mt-8 border-t pt-4 sm:pt-5 ${isDarkMode ? 'border-stone-800' : 'border-stone-200/80'}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <span className={`text-xs uppercase font-medium tracking-wider ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>Select Quantity</span>
+                  <div className={`flex items-center space-x-3 border rounded-full px-3 py-1 shadow-sm ${isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-white'}`}>
+                    <button onClick={() => setModalQuantity((q) => Math.max(1, q - 1))} className="hover:opacity-60 text-sm font-bold w-5 h-5 flex items-center justify-center">-</button>
+                    <span className="text-sm font-mono font-medium min-w-[20px] text-center">{modalQuantity}</span>
+                    <button onClick={() => setModalQuantity((q) => q + 1)} className="hover:opacity-60 text-sm font-bold w-5 h-5 flex items-center justify-center">+</button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    addToCart(activeProduct, modalQuantity);
+                    setActiveProduct(null);
+                  }}
+                  disabled={!activeProduct.isAvailable}
+                  className={`w-full py-3.5 sm:py-4 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${activeProduct.isAvailable ? isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800' : 'bg-stone-500 text-stone-300 cursor-not-allowed'}`}
+                >
+                  {activeProduct.isAvailable ? `Add To Bag • ${formatPrice(activeProduct.price * modalQuantity)}` : 'Out of Stock'}
+                </button>
               </div>
-
-              <button
-                type="submit"
-                disabled={authLoading}
-                className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
-                  isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
-                } ${authLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {authLoading ? 'Processing...' : authMode === 'signin' ? 'Sign In' : 'Register'}
-              </button>
-            </form>
-
-            <div className="mt-4 text-center">
-              <button
-                type="button"
-                onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
-                className="text-[10px] uppercase tracking-wider text-stone-400 hover:text-stone-600 underline"
-              >
-                {authMode === 'signin' ? "Don't have an account? Register" : 'Already have an account? Sign In'}
-              </button>
             </div>
           </div>
         </div>
@@ -1397,79 +1270,59 @@ export default function Home() {
 
                 <form onSubmit={handlePlaceOrder} className="space-y-4">
                   <div>
-                    <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                      Full Name
-                    </label>
+                    <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">Full Name</label>
                     <input
                       type="text"
                       required
                       placeholder="John Doe"
                       value={shippingForm.fullName}
                       onChange={(e) => setShippingForm({ ...shippingForm, fullName: e.target.value })}
-                      className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
-                        isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
-                      }`}
+                      className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'}`}
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                        Phone Number
-                      </label>
+                      <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">Phone Number</label>
                       <input
                         type="tel"
                         required
                         placeholder="+94 77 123 4567"
                         value={shippingForm.phone}
                         onChange={(e) => setShippingForm({ ...shippingForm, phone: e.target.value })}
-                        className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
-                          isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
-                        }`}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'}`}
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                        City
-                      </label>
+                      <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">City</label>
                       <input
                         type="text"
                         required
                         value={shippingForm.city}
                         onChange={(e) => setShippingForm({ ...shippingForm, city: e.target.value })}
-                        className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
-                          isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
-                        }`}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'}`}
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                      Delivery Address
-                    </label>
+                    <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">Delivery Address</label>
                     <input
                       type="text"
                       required
                       placeholder="Street name, house number..."
                       value={shippingForm.address}
                       onChange={(e) => setShippingForm({ ...shippingForm, address: e.target.value })}
-                      className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
-                        isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
-                      }`}
+                      className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'}`}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                      Payment Method
-                    </label>
+                    <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">Payment Method</label>
                     <select
                       value={shippingForm.paymentMethod}
                       onChange={(e) => setShippingForm({ ...shippingForm, paymentMethod: e.target.value })}
-                      className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
-                        isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
-                      }`}
+                      className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'}`}
                     >
                       <option value="cod">Cash on Delivery (COD)</option>
                       <option value="card">Credit / Debit Card</option>
@@ -1477,9 +1330,7 @@ export default function Home() {
                     </select>
                   </div>
 
-                  <div className={`p-4 rounded-xl text-xs font-mono space-y-1.5 my-4 ${
-                    isDarkMode ? 'bg-stone-900/60 border border-stone-800' : 'bg-stone-100/80 border border-stone-200'
-                  }`}>
+                  <div className={`p-4 rounded-xl text-xs font-mono space-y-1.5 my-4 ${isDarkMode ? 'bg-stone-900/60 border border-stone-800' : 'bg-stone-100/80 border border-stone-200'}`}>
                     <div className="flex justify-between text-stone-400">
                       <span>Items ({totalCartItems})</span>
                       <span>{formatPrice(subtotal)}</span>
@@ -1496,9 +1347,7 @@ export default function Home() {
 
                   <button
                     type="submit"
-                    className={`w-full py-4 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
-                      isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
-                    }`}
+                    className={`w-full py-4 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'}`}
                   >
                     Confirm Order ({formatPrice(grandTotal)})
                   </button>
@@ -1506,19 +1355,13 @@ export default function Home() {
               </>
             ) : (
               <div className="py-6 text-center">
-                <div className="w-14 h-14 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
-                  ✓
-                </div>
+                <div className="w-14 h-14 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">✓</div>
                 <h3 className="text-xl font-medium tracking-tight mb-1">Order Saved & Confirmed!</h3>
                 <p className="text-xs text-stone-400 font-mono mb-6">Receipt ID: {receipt?.orderId}</p>
 
                 {receipt && (
-                  <div className={`text-left p-4 rounded-2xl border text-xs font-mono space-y-2 mb-6 ${
-                    isDarkMode ? 'bg-stone-900/60 border-stone-800' : 'bg-stone-100/60 border-stone-200'
-                  }`}>
-                    <div className="border-b pb-2 mb-2 font-semibold">
-                      Recipient: {receipt.customerName}
-                    </div>
+                  <div className={`text-left p-4 rounded-2xl border text-xs font-mono space-y-2 mb-6 ${isDarkMode ? 'bg-stone-900/60 border-stone-800' : 'bg-stone-100/60 border-stone-200'}`}>
+                    <div className="border-b pb-2 mb-2 font-semibold">Recipient: {receipt.customerName}</div>
                     <div>Address: {receipt.address}, {receipt.city}</div>
                     <div>Phone: {receipt.phone}</div>
                     <div>Payment: {receipt.paymentMethod}</div>
@@ -1542,9 +1385,7 @@ export default function Home() {
                     setIsCheckoutOpen(false);
                     setCheckoutStep('details');
                   }}
-                  className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
-                    isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
-                  }`}
+                  className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'}`}
                 >
                   Return To Store
                 </button>
@@ -1554,10 +1395,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* Minimal Footer */}
-      <footer className={`border-t py-12 px-6 sm:px-12 text-center text-xs font-mono ${
-        isDarkMode ? 'border-stone-800 text-stone-500' : 'border-stone-200/80 text-stone-400'
-      }`}>
+      {/* Footer */}
+      <footer className={`border-t py-12 px-6 sm:px-12 text-center text-xs font-mono ${isDarkMode ? 'border-stone-800 text-stone-500' : 'border-stone-200/80 text-stone-400'}`}>
         <p>© {new Date().getFullYear()} Ziel Store. Artisanal Fermentations & Handcrafted Formulations.</p>
       </footer>
     </main>
