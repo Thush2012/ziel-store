@@ -33,6 +33,35 @@ interface OrderReceipt {
   paymentMethod: string;
 }
 
+// Historic Order type definition
+interface PastOrder {
+  id: string;
+  order_number: string;
+  created_at: string;
+  total_amount: number;
+  shipping_fee: number;
+  payment_method: string;
+  shipping_address: string;
+  city: string;
+  phone: string;
+}
+
+// Currency definition & exchange rates (Base: USD)
+type Currency = 'USD' | 'LKR' | 'EUR' | 'GBP';
+
+interface CurrencyConfig {
+  symbol: string;
+  rate: number;
+  decimals: number;
+}
+
+const CURRENCIES: Record<Currency, CurrencyConfig> = {
+  USD: { symbol: '$', rate: 1.0, decimals: 2 },
+  LKR: { symbol: 'Rs. ', rate: 300.0, decimals: 0 },
+  EUR: { symbol: '€', rate: 0.92, decimals: 2 },
+  GBP: { symbol: '£', rate: 0.78, decimals: 2 },
+};
+
 // Ziel Store Default / Fallback Product Data
 const INITIAL_PRODUCTS: Product[] = [
   {
@@ -169,6 +198,9 @@ export default function Home() {
   // Dynamic Products State
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
 
+  // Currency State
+  const [currency, setCurrency] = useState<Currency>('USD');
+
   // Search, Filter & Sort
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Works');
@@ -186,12 +218,18 @@ export default function Home() {
   // FAQ Accordion State
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  // Account / Login states
+  // Supabase Auth States
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-  const [user, setUser] = useState<{ email: string; name: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; email: string; name: string } | null>(null);
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+
+  // Order History States
+  const [isOrdersOpen, setIsOrdersOpen] = useState(false);
+  const [userOrders, setUserOrders] = useState<PastOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
 
   // Checkout Flow States
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -208,6 +246,43 @@ export default function Home() {
   // Contact Form State
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
+
+  // Format price helper according to chosen currency
+  const formatPrice = (amountInUsd: number) => {
+    const { symbol, rate, decimals } = CURRENCIES[currency];
+    const converted = amountInUsd * rate;
+    return `${symbol}${converted.toLocaleString(undefined, {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    })}`;
+  };
+
+  // --- SUPABASE AUTH SESSION LISTENER ---
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Customer',
+        });
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Customer',
+        });
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // --- FETCH PRODUCTS FROM SUPABASE ON MOUNT ---
   useEffect(() => {
@@ -247,6 +322,31 @@ export default function Home() {
     fetchSupabaseProducts();
   }, []);
 
+  // Fetch Order History for Authenticated User
+  const fetchUserOrders = async () => {
+    if (!user) return;
+    setOrdersLoading(true);
+    setIsOrdersOpen(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Failed to fetch orders:', error);
+        showNotification('Unable to fetch orders');
+      } else if (data) {
+        setUserOrders(data as PastOrder[]);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
   // LocalStorage persistence hooks
   useEffect(() => {
     const savedCart = localStorage.getItem('ziel_cart');
@@ -258,6 +358,11 @@ export default function Home() {
     if (savedTheme) {
       setIsDarkMode(savedTheme === 'dark');
     }
+
+    const savedCurrency = localStorage.getItem('ziel_currency') as Currency;
+    if (savedCurrency && CURRENCIES[savedCurrency]) {
+      setCurrency(savedCurrency);
+    }
   }, []);
 
   useEffect(() => {
@@ -268,7 +373,10 @@ export default function Home() {
     localStorage.setItem('ziel_theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
-  // Toast Notification Helper
+  useEffect(() => {
+    localStorage.setItem('ziel_currency', currency);
+  }, [currency]);
+
   const showNotification = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -324,18 +432,57 @@ export default function Home() {
     setCart([]);
   };
 
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  // Auth Handler
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!emailInput) return;
-    const nameFromEmail = emailInput.split('@')[0];
-    setUser({ email: emailInput, name: nameFromEmail });
-    setIsAuthOpen(false);
-    setEmailInput('');
-    setPasswordInput('');
+    if (!emailInput || !passwordInput) return;
+    setAuthLoading(true);
+
+    try {
+      if (authMode === 'signup') {
+        const { error } = await supabase.auth.signUp({
+          email: emailInput,
+          password: passwordInput,
+          options: {
+            data: { full_name: emailInput.split('@')[0] },
+          },
+        });
+
+        if (error) {
+          showNotification(`Sign Up Error: ${error.message}`);
+        } else {
+          showNotification('Registration successful! You are signed in.');
+          setIsAuthOpen(false);
+          setEmailInput('');
+          setPasswordInput('');
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: emailInput,
+          password: passwordInput,
+        });
+
+        if (error) {
+          showNotification(`Sign In Error: ${error.message}`);
+        } else {
+          showNotification('Welcome back!');
+          setIsAuthOpen(false);
+          setEmailInput('');
+          setPasswordInput('');
+        }
+      }
+    } catch (err: any) {
+      showNotification(err?.message || 'Authentication failed');
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
+    setIsOrdersOpen(false);
+    showNotification('Signed out successfully');
   };
 
   const handleContactSubmit = (e: React.FormEvent) => {
@@ -349,7 +496,7 @@ export default function Home() {
   const shippingFee = subtotal > 0 ? 5.00 : 0.00;
   const grandTotal = subtotal + shippingFee;
 
-  // --- SAVE CONFIRMED ORDER TO SUPABASE ---
+  // Save Order
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
@@ -358,12 +505,12 @@ export default function Home() {
     const orderNum = `ZIEL-${randomNum}`;
 
     try {
-      // 1. Insert order record
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert([
           {
             order_number: orderNum,
+            user_id: user ? user.id : null,
             total_amount: grandTotal,
             shipping_fee: shippingFee,
             payment_method: shippingForm.paymentMethod,
@@ -377,8 +524,11 @@ export default function Home() {
 
       if (orderError) {
         console.error('Order saving error:', orderError);
-      } else if (orderData) {
-        // 2. Insert line items
+        showNotification(`Order Error: ${orderError.message}`);
+        return;
+      }
+
+      if (orderData) {
         const orderItemsPayload = cart.map((item) => ({
           order_id: orderData.id,
           product_id: item.id,
@@ -386,13 +536,15 @@ export default function Home() {
           unit_price: item.price,
         }));
 
-        await supabase.from('order_items').insert(orderItemsPayload);
+        const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
+        if (itemsError) {
+          console.error('Line items saving error:', itemsError);
+        }
       }
     } catch (err) {
       console.error('Order submission failed:', err);
     }
 
-    // 3. Set receipt & reset cart
     const newReceipt: OrderReceipt = {
       orderId: orderNum,
       items: [...cart],
@@ -414,7 +566,6 @@ export default function Home() {
     setCheckoutStep('success');
   };
 
-  // Theme styling helpers
   const bgMain = isDarkMode ? 'bg-[#141413] text-[#F0EFEA]' : 'bg-[#FAF9F5] text-[#1C1B1A]';
   const headerBg = isDarkMode ? 'bg-[#141413]/80 border-stone-800' : 'bg-[#FAF9F5]/80 border-stone-200/60';
   const cardBorder = isDarkMode ? 'border-stone-800 hover:border-stone-700' : 'border-stone-200/40 hover:border-stone-300';
@@ -425,7 +576,7 @@ export default function Home() {
   return (
     <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
       
-      {/* Toast Notification Alert */}
+      {/* Toast Alert */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 px-4 py-3 rounded-2xl shadow-xl text-xs font-medium tracking-wide flex items-center space-x-2 animate-bounce">
           <span>✨</span>
@@ -437,13 +588,13 @@ export default function Home() {
       <div className={`py-1.5 px-4 text-center text-[10px] uppercase font-mono tracking-widest border-b ${
         isDarkMode ? 'bg-stone-900 border-stone-800 text-stone-400' : 'bg-stone-100 border-stone-200 text-stone-600'
       }`}>
-        Batch No. 04 Now Available • Complimentary Island-Wide Shipping Over $50
+        Batch No. 04 Now Available • Complimentary Island-Wide Shipping Over {formatPrice(50)}
       </div>
 
-      {/* FIXED HEADER: Responsive layout without overlap */}
+      {/* Header */}
       <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3 flex items-center justify-between gap-2`}>
         
-        {/* Left: Logo & Brand Name */}
+        {/* Left: Logo */}
         <div className="flex items-center space-x-2 shrink-0">
           <img 
             src="/logo.png" 
@@ -456,7 +607,7 @@ export default function Home() {
           </span>
         </div>
 
-        {/* Center Navigation (Desktop Only) */}
+        {/* Center Nav */}
         <nav className={`hidden md:flex items-center space-x-10 text-xs font-medium uppercase tracking-widest ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
           <a href="#works" className="hover:text-current transition-colors">Catalog</a>
           <a href="#about" className="hover:text-current transition-colors">Craftsmanship</a>
@@ -464,10 +615,9 @@ export default function Home() {
           <a href="#contact" className="hover:text-current transition-colors">Contact</a>
         </nav>
 
-        {/* Right Action Group: Theme Toggle, Account & Bag */}
+        {/* Right Actions */}
         <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
           
-          {/* Theme Toggle Button */}
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             title="Toggle Theme"
@@ -480,12 +630,15 @@ export default function Home() {
             <span className="text-xs sm:text-sm leading-none">{isDarkMode ? '☀️' : '🌙'}</span>
           </button>
 
-          {/* User Account / Auth Section */}
           {user ? (
             <div className="flex items-center space-x-1">
-              <span className={`text-[10px] sm:text-xs font-mono px-2 py-1 sm:px-3 sm:py-1.5 rounded-full border max-w-[70px] sm:max-w-none truncate ${isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-stone-100'}`}>
-                👤 {user.name}
-              </span>
+              <button
+                onClick={fetchUserOrders}
+                className={`text-[10px] sm:text-xs font-mono px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full border max-w-[90px] sm:max-w-none truncate hover:opacity-80 transition-opacity ${isDarkMode ? 'border-stone-700 bg-stone-800 text-stone-200' : 'border-stone-300 bg-stone-100 text-stone-800'}`}
+                title="Click to view your orders"
+              >
+                👤 {user.name} (Orders)
+              </button>
               <button
                 onClick={handleLogout}
                 className="text-[9px] uppercase font-mono text-stone-400 hover:text-stone-600 underline px-1"
@@ -506,7 +659,6 @@ export default function Home() {
             </button>
           )}
 
-          {/* Shopping Bag Button */}
           <button
             onClick={() => setIsCartOpen(true)}
             className={`group flex items-center space-x-1.5 sm:space-x-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wider px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all shadow-sm ${
@@ -525,7 +677,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Hero Showcase Header */}
+      {/* Hero Showcase */}
       <section className="px-6 sm:px-12 pt-12 sm:pt-20 pb-10 sm:pb-12 max-w-7xl mx-auto">
         <p className={`text-[10px] sm:text-xs uppercase tracking-[0.25em] font-semibold mb-3 sm:mb-4 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
           Handcrafted Essentials & Fermentations
@@ -535,7 +687,7 @@ export default function Home() {
         </h1>
       </section>
 
-      {/* Category Pills, Search & Sorting Controls */}
+      {/* Categories, Search, Currency & Sorting */}
       <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pb-8 sm:pb-10">
         <div className={`flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b pb-6 ${
           isDarkMode ? 'border-stone-800' : 'border-stone-200/80'
@@ -555,8 +707,9 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Search & Sort Controls Group */}
+          {/* Search, Currency & Sort Group */}
           <div className="flex flex-col sm:flex-row items-center gap-3">
+            {/* Search Input */}
             <div className="relative w-full sm:w-60">
               <input
                 type="text"
@@ -579,6 +732,25 @@ export default function Home() {
               )}
             </div>
 
+            {/* Currency Selector (Positioned Next to Search) */}
+            <div className="relative w-full sm:w-auto">
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as Currency)}
+                className={`w-full sm:w-auto px-4 py-2 rounded-full border text-xs font-mono font-medium focus:outline-none cursor-pointer transition-colors ${
+                  isDarkMode 
+                    ? 'bg-stone-900 border-stone-700 text-stone-300 hover:border-stone-600' 
+                    : 'bg-white border-stone-300 text-stone-700 hover:border-stone-400'
+                }`}
+                title="Select store currency"
+              >
+                <option value="USD">USD ($)</option>
+                <option value="LKR">LKR (Rs.)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GBP">GBP (£)</option>
+              </select>
+            </div>
+
             {/* Price Sort Dropdown */}
             <select
               value={sortBy}
@@ -595,7 +767,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Product Catalog Grid */}
+      {/* Catalog Grid */}
       <section className="px-6 sm:px-12 max-w-7xl mx-auto pb-24">
         {filteredProducts.length === 0 ? (
           <div className="py-20 text-center">
@@ -625,7 +797,7 @@ export default function Home() {
                     <span className={`text-xs font-mono font-medium px-2.5 py-1 rounded-md backdrop-blur-sm ${
                       isDarkMode ? 'bg-stone-900/80 text-stone-300' : 'bg-[#FAF9F5]/80 text-stone-700'
                     }`}>
-                      ${product.price.toFixed(2)}
+                      {formatPrice(product.price)}
                     </span>
                   </div>
 
@@ -701,7 +873,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ Accordion Section */}
+      {/* FAQ Section */}
       <section id="faq" className="py-16 sm:py-20 px-6 sm:px-12 max-w-5xl mx-auto">
         <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
           Answers & Information
@@ -890,7 +1062,7 @@ export default function Home() {
                 </p>
 
                 <div className="mt-4 text-xl sm:text-2xl font-mono font-semibold">
-                  ${activeProduct.price.toFixed(2)}
+                  {formatPrice(activeProduct.price)}
                   <span className={`text-xs font-sans font-normal ml-2 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>/ item</span>
                 </div>
 
@@ -900,7 +1072,6 @@ export default function Home() {
                   {activeProduct.description}
                 </p>
 
-                {/* Product Specifications Grid */}
                 {activeProduct.specs && activeProduct.specs.length > 0 && (
                   <div className="mt-4 grid grid-cols-2 gap-2 text-[10px] font-mono border-t pt-3 border-stone-200/20">
                     {activeProduct.specs.map((s, i) => (
@@ -952,7 +1123,7 @@ export default function Home() {
                       : 'bg-stone-500 text-stone-300 cursor-not-allowed'
                   }`}
                 >
-                  {activeProduct.isAvailable ? `Add To Bag • $${(activeProduct.price * modalQuantity).toFixed(2)}` : 'Out of Stock'}
+                  {activeProduct.isAvailable ? `Add To Bag • ${formatPrice(activeProduct.price * modalQuantity)}` : 'Out of Stock'}
                 </button>
               </div>
             </div>
@@ -960,7 +1131,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* SHOPPING BAG DRAWER: With complete quantity adjustment and item removal */}
+      {/* Shopping Bag Drawer */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end">
           <div 
@@ -991,7 +1162,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Cart Items List */}
             <div className="p-6 overflow-y-auto flex-1 space-y-4 divide-y divide-stone-200/20">
               {cart.length === 0 ? (
                 <div className="py-20 text-center">
@@ -1004,9 +1174,8 @@ export default function Home() {
                     <div className="flex-1 pr-2">
                       <h4 className="text-xs font-medium">{item.name}</h4>
                       <p className="text-[10px] font-mono text-stone-400 mt-0.5">
-                        ${item.price.toFixed(2)} each
+                        {formatPrice(item.price)} each
                       </p>
-                      {/* Direct Remove Button */}
                       <button
                         onClick={() => removeFromCart(item.id)}
                         className="text-[9px] uppercase tracking-wider font-semibold text-rose-500 hover:text-rose-700 mt-1.5 flex items-center gap-1 transition-colors"
@@ -1016,14 +1185,12 @@ export default function Home() {
                     </div>
 
                     <div className="flex items-center space-x-3">
-                      {/* Quantity Controller */}
                       <div className={`flex items-center space-x-2 border rounded-full px-2.5 py-1 text-xs font-mono ${
                         isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-white'
                       }`}>
                         <button 
                           onClick={() => updateCartQty(item.id, -1)} 
                           className="hover:text-rose-500 font-bold px-1 transition-colors"
-                          title="Decrease quantity"
                         >
                           -
                         </button>
@@ -1031,15 +1198,13 @@ export default function Home() {
                         <button 
                           onClick={() => updateCartQty(item.id, 1)} 
                           className="hover:opacity-60 font-bold px-1 transition-colors"
-                          title="Increase quantity"
                         >
                           +
                         </button>
                       </div>
 
-                      {/* Total Price Per Product Line */}
                       <span className="text-xs font-mono font-semibold min-w-[55px] text-right">
-                        ${(item.price * item.qty).toFixed(2)}
+                        {formatPrice(item.price * item.qty)}
                       </span>
                     </div>
                   </div>
@@ -1047,21 +1212,20 @@ export default function Home() {
               )}
             </div>
 
-            {/* Cart Footer */}
             {cart.length > 0 && (
               <div className={`p-6 border-t space-y-4 ${isDarkMode ? 'border-stone-800 bg-stone-900/30' : 'border-stone-200 bg-stone-50/50'}`}>
                 <div className="space-y-1.5 text-xs font-mono">
                   <div className="flex justify-between text-stone-400">
                     <span>Subtotal</span>
-                    <span>${subtotal.toFixed(2)}</span>
+                    <span>{formatPrice(subtotal)}</span>
                   </div>
                   <div className="flex justify-between text-stone-400">
                     <span>Estimated Shipping</span>
-                    <span>${shippingFee.toFixed(2)}</span>
+                    <span>{formatPrice(shippingFee)}</span>
                   </div>
                   <div className="flex justify-between text-sm font-semibold pt-2 border-t border-stone-200/20 text-current">
                     <span>Total</span>
-                    <span>${grandTotal.toFixed(2)}</span>
+                    <span>{formatPrice(grandTotal)}</span>
                   </div>
                 </div>
 
@@ -1082,7 +1246,65 @@ export default function Home() {
         </div>
       )}
 
-      {/* Auth Modal (Sign In / Sign Up) */}
+      {/* User Order History Modal */}
+      {isOrdersOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setIsOrdersOpen(false)}
+        >
+          <div 
+            className={`w-full max-w-2xl p-6 sm:p-8 rounded-3xl shadow-2xl border my-auto ${modalBg}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-stone-200/20">
+              <div>
+                <h3 className="text-base font-medium uppercase tracking-wider">Your Order History</h3>
+                <p className="text-xs text-stone-400 font-mono mt-0.5">Orders placed under {user?.email}</p>
+              </div>
+              <button onClick={() => setIsOrdersOpen(false)} className="text-stone-400 hover:text-stone-600 text-sm">✕</button>
+            </div>
+
+            {ordersLoading ? (
+              <div className="py-12 text-center text-xs font-mono text-stone-400">Loading order records...</div>
+            ) : userOrders.length === 0 ? (
+              <div className="py-12 text-center space-y-2">
+                <div className="text-3xl">📦</div>
+                <p className="text-xs font-mono text-stone-400">No past orders found on your account.</p>
+              </div>
+            ) : (
+              <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+                {userOrders.map((ord) => (
+                  <div 
+                    key={ord.id} 
+                    className={`p-4 rounded-2xl border text-xs font-mono space-y-2 ${
+                      isDarkMode ? 'bg-stone-900/60 border-stone-800' : 'bg-stone-100/60 border-stone-200'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center border-b pb-2 border-stone-200/20">
+                      <span className="font-bold text-sm tracking-wider">{ord.order_number}</span>
+                      <span className="text-[10px] text-stone-400">
+                        {ord.created_at ? new Date(ord.created_at).toLocaleDateString() : 'Recent'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-stone-400">
+                      <div><span className="text-stone-500">Destination:</span> {ord.city}</div>
+                      <div><span className="text-stone-500">Payment:</span> {ord.payment_method.toUpperCase()}</div>
+                    </div>
+
+                    <div className="flex justify-between items-baseline pt-2 border-t border-stone-200/20 font-semibold text-current">
+                      <span>Total Billed</span>
+                      <span className="text-sm font-bold">{formatPrice(Number(ord.total_amount))}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Supabase Auth Modal */}
       {isAuthOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1134,11 +1356,12 @@ export default function Home() {
 
               <button
                 type="submit"
+                disabled={authLoading}
                 className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
                   isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
-                }`}
+                } ${authLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                {authMode === 'signin' ? 'Sign In' : 'Register'}
+                {authLoading ? 'Processing...' : authMode === 'signin' ? 'Sign In' : 'Register'}
               </button>
             </form>
 
@@ -1259,15 +1482,15 @@ export default function Home() {
                   }`}>
                     <div className="flex justify-between text-stone-400">
                       <span>Items ({totalCartItems})</span>
-                      <span>${subtotal.toFixed(2)}</span>
+                      <span>{formatPrice(subtotal)}</span>
                     </div>
                     <div className="flex justify-between text-stone-400">
                       <span>Shipping</span>
-                      <span>${shippingFee.toFixed(2)}</span>
+                      <span>{formatPrice(shippingFee)}</span>
                     </div>
                     <div className="flex justify-between font-semibold pt-1 border-t border-stone-200/20 text-current">
                       <span>Total Amount</span>
-                      <span>${grandTotal.toFixed(2)}</span>
+                      <span>{formatPrice(grandTotal)}</span>
                     </div>
                   </div>
 
@@ -1277,7 +1500,7 @@ export default function Home() {
                       isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
                     }`}
                   >
-                    Confirm Order (${grandTotal.toFixed(2)})
+                    Confirm Order ({formatPrice(grandTotal)})
                   </button>
                 </form>
               </>
@@ -1303,12 +1526,12 @@ export default function Home() {
                       {receipt.items.map((it) => (
                         <div key={it.id} className="flex justify-between text-stone-400">
                           <span>{it.qty}x {it.name}</span>
-                          <span>${(it.price * it.qty).toFixed(2)}</span>
+                          <span>{formatPrice(it.price * it.qty)}</span>
                         </div>
                       ))}
                       <div className="flex justify-between font-semibold text-current pt-1 border-t border-stone-200/20">
                         <span>Total Paid</span>
-                        <span>${receipt.total.toFixed(2)}</span>
+                        <span>{formatPrice(receipt.total)}</span>
                       </div>
                     </div>
                   </div>
