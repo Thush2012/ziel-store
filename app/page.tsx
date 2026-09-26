@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 // Product type definition
 interface Product {
@@ -15,9 +16,10 @@ interface Product {
   aspect: string;
   colorBgLight: string;
   colorBgDark: string;
+  specs: { label: string; value: string }[];
 }
 
-// Order confirmation type definition
+// Order receipt type definition
 interface OrderReceipt {
   orderId: string;
   items: { id: number; name: string; price: number; qty: number }[];
@@ -31,8 +33,8 @@ interface OrderReceipt {
   paymentMethod: string;
 }
 
-// Ziel Store Product Data
-const PRODUCTS: Product[] = [
+// Ziel Store Default / Fallback Product Data
+const INITIAL_PRODUCTS: Product[] = [
   {
     id: 1,
     name: 'Ziel King Coconut Wine',
@@ -45,6 +47,12 @@ const PRODUCTS: Product[] = [
     aspect: 'aspect-[4/5]',
     colorBgLight: 'bg-[#EFECE6]',
     colorBgDark: 'bg-[#22211F]',
+    specs: [
+      { label: 'Volume', value: '750 ml' },
+      { label: 'ABV', value: '12.5%' },
+      { label: 'Origin', value: 'Sri Lanka' },
+      { label: 'Serving Temp', value: '8°C - 10°C' },
+    ],
   },
   {
     id: 2,
@@ -58,6 +66,12 @@ const PRODUCTS: Product[] = [
     aspect: 'aspect-[1/1]',
     colorBgLight: 'bg-[#EAE8E3]',
     colorBgDark: 'bg-[#252422]',
+    specs: [
+      { label: 'Weight', value: '180g bar' },
+      { label: 'Key Ingredient', value: 'Volcanic Pumice & Citrus Oil' },
+      { label: 'Process', value: 'Cold-Process Saponification' },
+      { label: 'Best For', value: 'Mechanics, Printers, Artisans' },
+    ],
   },
   {
     id: 3,
@@ -71,6 +85,11 @@ const PRODUCTS: Product[] = [
     aspect: 'aspect-[4/5]',
     colorBgLight: 'bg-[#F2EFEA]',
     colorBgDark: 'bg-[#1E1D1B]',
+    specs: [
+      { label: 'Weight', value: '150g bar' },
+      { label: 'Scent', value: 'Wild Herbal & Coconut' },
+      { label: 'Skin Type', value: 'All / Sensitive' },
+    ],
   },
   {
     id: 4,
@@ -84,6 +103,11 @@ const PRODUCTS: Product[] = [
     aspect: 'aspect-[1/1]',
     colorBgLight: 'bg-[#EBE7DF]',
     colorBgDark: 'bg-[#22211F]',
+    specs: [
+      { label: 'Volume', value: '750 ml' },
+      { label: 'ABV', value: '14.0%' },
+      { label: 'Aging', value: '12 Months Cask' },
+    ],
   },
   {
     id: 5,
@@ -97,6 +121,10 @@ const PRODUCTS: Product[] = [
     aspect: 'aspect-[4/5]',
     colorBgLight: 'bg-[#EFECE6]',
     colorBgDark: 'bg-[#252422]',
+    specs: [
+      { label: 'Weight', value: '160g bar' },
+      { label: 'Exfoliating Level', value: 'High' },
+    ],
   },
   {
     id: 6,
@@ -110,26 +138,53 @@ const PRODUCTS: Product[] = [
     aspect: 'aspect-[16/10]',
     colorBgLight: 'bg-[#E8E4DC]',
     colorBgDark: 'bg-[#282724]',
+    specs: [
+      { label: 'Includes', value: '1x Wine, 2x Soap Bars' },
+      { label: 'Packaging', value: 'Matte Gift Box' },
+    ],
   },
 ];
 
 const CATEGORIES = ['All Works', 'Wines', 'Soaps', 'Sets'];
 
+const FAQS = [
+  {
+    q: 'How is Ziel King Coconut Wine produced?',
+    a: 'Our wine is naturally fermented from 100% pure king coconut nectar harvested in Sri Lanka. We strictly avoid artificial additives, preserving natural floral and caramel aromatic notes.',
+  },
+  {
+    q: 'What makes Ziel Grit Soap effective against industrial grease?',
+    a: 'Ziel Grit incorporates real volcanic pumice for physical exfoliation paired with natural citrus oils that break down heavy petroleum grease, rust, and printer ink.',
+  },
+  {
+    q: 'What are your delivery timelines within Sri Lanka?',
+    a: 'Orders are dispatched within 24 hours. Delivery takes 1–3 business days via registered courier across all major cities.',
+  },
+];
+
 export default function Home() {
   // Theme state
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Search & Filter
+  // Dynamic Products State
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+
+  // Search, Filter & Sort
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Works');
+  const [sortBy, setSortBy] = useState<'default' | 'low-to-high' | 'high-to-low'>('default');
 
   // Commerce states
   const [cart, setCart] = useState<{ id: number; name: string; price: number; qty: number }[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Modal states
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [modalQuantity, setModalQuantity] = useState<number>(1);
+
+  // FAQ Accordion State
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   // Account / Login states
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -154,6 +209,44 @@ export default function Home() {
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
 
+  // --- FETCH PRODUCTS FROM SUPABASE ON MOUNT ---
+  useEffect(() => {
+    async function fetchSupabaseProducts() {
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .eq('is_available', true);
+
+        if (error) {
+          console.error('Supabase fetch error:', error);
+        } else if (data && data.length > 0) {
+          const mapped: Product[] = data.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            category: item.category || 'Wines',
+            price: Number(item.price),
+            tagline: item.tagline || '',
+            description: item.description || '',
+            isAvailable: item.is_available,
+            image: item.image_url || '/images/wine.jpg',
+            aspect: 'aspect-[4/5]',
+            colorBgLight: 'bg-[#EFECE6]',
+            colorBgDark: 'bg-[#22211F]',
+            specs: [
+              { label: 'Stock', value: `${item.stock_qty || 0} units` },
+            ],
+          }));
+          setProducts(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to load products from database:', err);
+      }
+    }
+
+    fetchSupabaseProducts();
+  }, []);
+
   // LocalStorage persistence hooks
   useEffect(() => {
     const savedCart = localStorage.getItem('ziel_cart');
@@ -175,12 +268,22 @@ export default function Home() {
     localStorage.setItem('ziel_theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
-  // Filter products
-  const filteredProducts = PRODUCTS.filter((product) => {
+  // Toast Notification Helper
+  const showNotification = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Filter & Sort products
+  const filteredProducts = products.filter((product) => {
     const matchesCategory = selectedCategory === 'All Works' || product.category === selectedCategory;
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           product.tagline.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
+  }).sort((a, b) => {
+    if (sortBy === 'low-to-high') return a.price - b.price;
+    if (sortBy === 'high-to-low') return b.price - a.price;
+    return 0;
   });
 
   const handleOpenProduct = (product: Product) => {
@@ -202,7 +305,7 @@ export default function Home() {
       }
       return [...prevCart, { id: product.id, name: product.name, price: product.price, qty: qtyToAdd }];
     });
-    setIsCartOpen(true);
+    showNotification(`Added ${qtyToAdd}x ${product.name} to bag`);
   };
 
   const updateCartQty = (id: number, delta: number) => {
@@ -215,6 +318,10 @@ export default function Home() {
 
   const removeFromCart = (id: number) => {
     setCart((prevCart) => prevCart.filter((item) => item.id !== id));
+  };
+
+  const clearCart = () => {
+    setCart([]);
   };
 
   const handleAuthSubmit = (e: React.FormEvent) => {
@@ -242,13 +349,50 @@ export default function Home() {
   const shippingFee = subtotal > 0 ? 5.00 : 0.00;
   const grandTotal = subtotal + shippingFee;
 
-  const handlePlaceOrder = (e: React.FormEvent) => {
+  // --- SAVE CONFIRMED ORDER TO SUPABASE ---
+  const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
 
     const randomNum = Math.floor(10000 + Math.random() * 90000);
     const orderNum = `ZIEL-${randomNum}`;
 
+    try {
+      // 1. Insert order record
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert([
+          {
+            order_number: orderNum,
+            total_amount: grandTotal,
+            shipping_fee: shippingFee,
+            payment_method: shippingForm.paymentMethod,
+            shipping_address: shippingForm.address,
+            city: shippingForm.city,
+            phone: shippingForm.phone,
+          },
+        ])
+        .select()
+        .single();
+
+      if (orderError) {
+        console.error('Order saving error:', orderError);
+      } else if (orderData) {
+        // 2. Insert line items
+        const orderItemsPayload = cart.map((item) => ({
+          order_id: orderData.id,
+          product_id: item.id,
+          quantity: item.qty,
+          unit_price: item.price,
+        }));
+
+        await supabase.from('order_items').insert(orderItemsPayload);
+      }
+    } catch (err) {
+      console.error('Order submission failed:', err);
+    }
+
+    // 3. Set receipt & reset cart
     const newReceipt: OrderReceipt = {
       orderId: orderNum,
       items: [...cart],
@@ -281,84 +425,105 @@ export default function Home() {
   return (
     <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
       
-      {/* FIXED HEADER: Responsive layout preventing overlap */}
-<header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3.5 flex items-center justify-between gap-2`}>
-  {/* Left: Brand Container (Strictly isolated) */}
-  <div className="flex items-center space-x-2 shrink-0">
-    <img 
-      src="/logo.png" 
-      alt="Ziel Store Logo" 
-      className="h-6 sm:h-8 w-auto object-contain"
-      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-    />
-    <span className="text-sm sm:text-lg font-bold tracking-[0.05em] uppercase whitespace-nowrap">
-      ZIEL<span className={`font-light ml-1 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>STORE</span>
-    </span>
-  </div>
+      {/* Toast Notification Alert */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 px-4 py-3 rounded-2xl shadow-xl text-xs font-medium tracking-wide flex items-center space-x-2 animate-bounce">
+          <span>✨</span>
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
-  {/* Center Navigation (Desktop Only) */}
-  <nav className={`hidden md:flex items-center space-x-10 text-xs font-medium uppercase tracking-widest ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
-    <a href="#works" className="hover:text-current transition-colors">Catalog</a>
-    <a href="#about" className="hover:text-current transition-colors">Craftsmanship</a>
-    <a href="#contact" className="hover:text-current transition-colors">Contact</a>
-  </nav>
-
-  {/* Right: Actions Group (Theme Toggle, Account, Bag grouped cleanly together) */}
-  <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
-    {/* Theme Toggle Button */}
-    <button
-      onClick={() => setIsDarkMode(!isDarkMode)}
-      title="Toggle Theme"
-      className={`p-1.5 sm:p-2 rounded-full border transition-all flex items-center justify-center shrink-0 ${
-        isDarkMode 
-          ? 'bg-stone-800 border-stone-700 text-amber-300 hover:bg-stone-700' 
-          : 'bg-stone-200/70 border-stone-300 text-stone-700 hover:bg-stone-300'
-      }`}
-    >
-      <span className="text-xs sm:text-sm leading-none">{isDarkMode ? '☀️' : '🌙'}</span>
-    </button>
-
-    {/* Account Button */}
-    {user ? (
-      <div className="flex items-center space-x-1">
-        <span className={`text-[10px] sm:text-xs font-mono px-2 py-1 sm:px-3 sm:py-1.5 rounded-full border max-w-[70px] sm:max-w-none truncate ${isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-stone-100'}`}>
-          👤 {user.name}
-        </span>
-        <button onClick={handleLogout} className="text-[9px] uppercase font-mono text-stone-400 hover:text-stone-600 underline px-1">
-          Exit
-        </button>
-      </div>
-    ) : (
-      <button
-        onClick={() => setIsAuthOpen(true)}
-        className={`text-[10px] sm:text-xs uppercase tracking-wider font-semibold px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full border transition-all ${
-          isDarkMode 
-            ? 'border-stone-700 hover:border-stone-500 text-stone-200' 
-            : 'border-stone-300 hover:border-stone-400 text-stone-800'
-        }`}
-      >
-        Account
-      </button>
-    )}
-
-    {/* Shopping Bag Button */}
-    <button
-      onClick={() => setIsCartOpen(true)}
-      className={`group flex items-center space-x-1.5 sm:space-x-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wider px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all shadow-sm ${
-        isDarkMode 
-          ? 'bg-[#F0EFEA] text-[#141413] hover:bg-white' 
-          : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
-      }`}
-    >
-      <span>Bag</span>
-      <span className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-mono transition-colors ${
-        isDarkMode ? 'bg-stone-300 text-stone-900' : 'bg-stone-700 text-[#FAF9F5]'
+      {/* Top Banner */}
+      <div className={`py-1.5 px-4 text-center text-[10px] uppercase font-mono tracking-widest border-b ${
+        isDarkMode ? 'bg-stone-900 border-stone-800 text-stone-400' : 'bg-stone-100 border-stone-200 text-stone-600'
       }`}>
-        {totalCartItems}
-      </span>
-    </button>
-  </div>
-</header>
+        Batch No. 04 Now Available • Complimentary Island-Wide Shipping Over $50
+      </div>
+
+      {/* FIXED HEADER: Responsive layout without overlap */}
+      <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3 flex items-center justify-between gap-2`}>
+        
+        {/* Left: Logo & Brand Name */}
+        <div className="flex items-center space-x-2 shrink-0">
+          <img 
+            src="/logo.png" 
+            alt="Ziel Store Logo" 
+            className="h-6 sm:h-8 w-auto object-contain"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+          <span className="text-sm sm:text-lg font-bold tracking-[0.05em] uppercase whitespace-nowrap">
+            ZIEL<span className={`font-light ml-1 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>STORE</span>
+          </span>
+        </div>
+
+        {/* Center Navigation (Desktop Only) */}
+        <nav className={`hidden md:flex items-center space-x-10 text-xs font-medium uppercase tracking-widest ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
+          <a href="#works" className="hover:text-current transition-colors">Catalog</a>
+          <a href="#about" className="hover:text-current transition-colors">Craftsmanship</a>
+          <a href="#faq" className="hover:text-current transition-colors">FAQ</a>
+          <a href="#contact" className="hover:text-current transition-colors">Contact</a>
+        </nav>
+
+        {/* Right Action Group: Theme Toggle, Account & Bag */}
+        <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
+          
+          {/* Theme Toggle Button */}
+          <button
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            title="Toggle Theme"
+            className={`p-1.5 sm:p-2 rounded-full border transition-all flex items-center justify-center shrink-0 ${
+              isDarkMode 
+                ? 'bg-stone-800 border-stone-700 text-amber-300 hover:bg-stone-700' 
+                : 'bg-stone-200/70 border-stone-300 text-stone-700 hover:bg-stone-300'
+            }`}
+          >
+            <span className="text-xs sm:text-sm leading-none">{isDarkMode ? '☀️' : '🌙'}</span>
+          </button>
+
+          {/* User Account / Auth Section */}
+          {user ? (
+            <div className="flex items-center space-x-1">
+              <span className={`text-[10px] sm:text-xs font-mono px-2 py-1 sm:px-3 sm:py-1.5 rounded-full border max-w-[70px] sm:max-w-none truncate ${isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-stone-100'}`}>
+                👤 {user.name}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="text-[9px] uppercase font-mono text-stone-400 hover:text-stone-600 underline px-1"
+              >
+                Exit
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsAuthOpen(true)}
+              className={`text-[10px] sm:text-xs uppercase tracking-wider font-semibold px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full border transition-all ${
+                isDarkMode 
+                  ? 'border-stone-700 hover:border-stone-500 text-stone-200' 
+                  : 'border-stone-300 hover:border-stone-400 text-stone-800'
+              }`}
+            >
+              Account
+            </button>
+          )}
+
+          {/* Shopping Bag Button */}
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className={`group flex items-center space-x-1.5 sm:space-x-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wider px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all shadow-sm ${
+              isDarkMode 
+                ? 'bg-[#F0EFEA] text-[#141413] hover:bg-white' 
+                : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
+            }`}
+          >
+            <span>Bag</span>
+            <span className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-mono transition-colors ${
+              isDarkMode ? 'bg-stone-300 text-stone-900' : 'bg-stone-700 text-[#FAF9F5]'
+            }`}>
+              {totalCartItems}
+            </span>
+          </button>
+        </div>
+      </header>
 
       {/* Hero Showcase Header */}
       <section className="px-6 sm:px-12 pt-12 sm:pt-20 pb-10 sm:pb-12 max-w-7xl mx-auto">
@@ -370,11 +535,12 @@ export default function Home() {
         </h1>
       </section>
 
-      {/* Category Pills & Search Input Bar */}
+      {/* Category Pills, Search & Sorting Controls */}
       <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pb-8 sm:pb-10">
-        <div className={`flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b pb-6 ${
+        <div className={`flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b pb-6 ${
           isDarkMode ? 'border-stone-800' : 'border-stone-200/80'
         }`}>
+          {/* Categories */}
           <div className="flex flex-wrap items-center gap-2">
             {CATEGORIES.map((cat) => (
               <button
@@ -389,26 +555,42 @@ export default function Home() {
             ))}
           </div>
 
-          <div className="relative w-full sm:w-64">
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full px-4 py-2 text-xs rounded-full border focus:outline-none transition-colors ${
-                isDarkMode 
-                  ? 'bg-stone-900 border-stone-700 text-stone-100 placeholder-stone-500 focus:border-stone-500' 
-                  : 'bg-white border-stone-300 text-stone-900 placeholder-stone-400 focus:border-stone-800'
+          {/* Search & Sort Controls Group */}
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <div className="relative w-full sm:w-60">
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={`w-full px-4 py-2 text-xs rounded-full border focus:outline-none transition-colors ${
+                  isDarkMode 
+                    ? 'bg-stone-900 border-stone-700 text-stone-100 placeholder-stone-500 focus:border-stone-500' 
+                    : 'bg-white border-stone-300 text-stone-900 placeholder-stone-400 focus:border-stone-800'
+                }`}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400 hover:text-stone-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Price Sort Dropdown */}
+            <select
+              value={sortBy}
+              onChange={(e: any) => setSortBy(e.target.value)}
+              className={`w-full sm:w-auto px-4 py-2 rounded-full border text-xs focus:outline-none ${
+                isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-300' : 'bg-white border-stone-300 text-stone-700'
               }`}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400 hover:text-stone-600"
-              >
-                ✕
-              </button>
-            )}
+            >
+              <option value="default">Sort: Featured</option>
+              <option value="low-to-high">Price: Low to High</option>
+              <option value="high-to-low">Price: High to Low</option>
+            </select>
           </div>
         </div>
       </section>
@@ -416,8 +598,14 @@ export default function Home() {
       {/* Product Catalog Grid */}
       <section className="px-6 sm:px-12 max-w-7xl mx-auto pb-24">
         {filteredProducts.length === 0 ? (
-          <div className="py-20 text-center text-stone-400 text-sm">
-            No products found matching "{searchQuery}".
+          <div className="py-20 text-center">
+            <p className="text-stone-400 text-sm mb-4">No products found matching "{searchQuery}".</p>
+            <button
+              onClick={() => { setSearchQuery(''); setSelectedCategory('All Works'); }}
+              className="text-xs uppercase font-mono tracking-wider underline text-stone-500 hover:text-current"
+            >
+              Reset Filters
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-12">
@@ -446,22 +634,20 @@ export default function Home() {
                       src={product.image}
                       alt={product.name}
                       className="w-full h-full object-contain drop-shadow-md rounded-xl transition-transform duration-500 group-hover:scale-105"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                   </div>
 
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleOpenProduct(product);
+                      addToCart(product, 1);
                     }}
                     className={`relative z-10 w-full text-xs uppercase tracking-widest py-3 rounded-xl font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 backdrop-blur-sm ${
                       isDarkMode ? 'bg-stone-100/90 text-stone-900' : 'bg-stone-900/90 text-[#FAF9F5]'
                     }`}
                   >
-                    View Details
+                    Quick Add +
                   </button>
                 </div>
 
@@ -515,9 +701,46 @@ export default function Home() {
         </div>
       </section>
 
+      {/* FAQ Accordion Section */}
+      <section id="faq" className="py-16 sm:py-20 px-6 sm:px-12 max-w-5xl mx-auto">
+        <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
+          Answers & Information
+        </p>
+        <h2 className="text-2xl sm:text-4xl font-light tracking-tight mb-8">
+          Frequently Asked Questions
+        </h2>
+
+        <div className="space-y-4">
+          {FAQS.map((faq, idx) => (
+            <div
+              key={idx}
+              className={`border rounded-2xl overflow-hidden transition-colors ${
+                isDarkMode ? 'border-stone-800 bg-stone-900/30' : 'border-stone-200 bg-white'
+              }`}
+            >
+              <button
+                onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
+                className="w-full px-6 py-4 text-left flex justify-between items-center text-xs sm:text-sm font-medium"
+              >
+                <span>{faq.q}</span>
+                <span className="text-lg leading-none">{openFaq === idx ? '−' : '+'}</span>
+              </button>
+
+              {openFaq === idx && (
+                <div className={`px-6 pb-4 text-xs leading-relaxed border-t pt-3 ${
+                  isDarkMode ? 'border-stone-800 text-stone-400' : 'border-stone-100 text-stone-600'
+                }`}>
+                  {faq.a}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Contact Section */}
-      <section id="contact" className="py-16 sm:py-20 px-6 sm:px-12 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+      <section id="contact" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800' : 'border-stone-200'}`}>
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
           <div>
             <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
               Get In Touch
@@ -638,9 +861,7 @@ export default function Home() {
                 src={activeProduct.image}
                 alt={activeProduct.name}
                 className="max-h-[240px] sm:max-h-[320px] w-auto object-contain drop-shadow-xl"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             </div>
 
@@ -678,6 +899,18 @@ export default function Home() {
                 }`}>
                   {activeProduct.description}
                 </p>
+
+                {/* Product Specifications Grid */}
+                {activeProduct.specs && activeProduct.specs.length > 0 && (
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-[10px] font-mono border-t pt-3 border-stone-200/20">
+                    {activeProduct.specs.map((s, i) => (
+                      <div key={i} className="flex flex-col">
+                        <span className="text-stone-400 uppercase">{s.label}</span>
+                        <span className="font-semibold">{s.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className={`mt-6 sm:mt-8 border-t pt-4 sm:pt-5 ${isDarkMode ? 'border-stone-800' : 'border-stone-200/80'}`}>
@@ -727,7 +960,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Shopping Bag Drawer Overlay */}
+      {/* SHOPPING BAG DRAWER: With complete quantity adjustment and item removal */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end">
           <div 
@@ -740,44 +973,72 @@ export default function Home() {
                 <h3 className="text-base font-medium uppercase tracking-wider">Shopping Bag</h3>
                 <span className="text-xs font-mono text-stone-400">({totalCartItems})</span>
               </div>
-              <button
-                onClick={() => setIsCartOpen(false)}
-                className="text-stone-400 hover:text-stone-600 text-lg"
-              >
-                ✕
-              </button>
+              <div className="flex items-center space-x-3">
+                {cart.length > 0 && (
+                  <button
+                    onClick={clearCart}
+                    className="text-[10px] uppercase tracking-wider text-rose-500 hover:text-rose-700 underline"
+                  >
+                    Clear All
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsCartOpen(false)}
+                  className="text-stone-400 hover:text-stone-600 text-lg"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
+            {/* Cart Items List */}
             <div className="p-6 overflow-y-auto flex-1 space-y-4 divide-y divide-stone-200/20">
               {cart.length === 0 ? (
-                <div className="py-16 text-center text-stone-400 text-xs font-mono">
-                  Your shopping bag is currently empty.
+                <div className="py-20 text-center">
+                  <div className="text-3xl mb-2">🛍️</div>
+                  <p className="text-xs font-mono text-stone-400">Your shopping bag is currently empty.</p>
                 </div>
               ) : (
                 cart.map((item) => (
-                  <div key={item.id} className="pt-4 first:pt-0 flex items-center justify-between">
-                    <div>
+                  <div key={item.id} className="pt-4 first:pt-0 flex items-center justify-between gap-2">
+                    <div className="flex-1 pr-2">
                       <h4 className="text-xs font-medium">{item.name}</h4>
                       <p className="text-[10px] font-mono text-stone-400 mt-0.5">
                         ${item.price.toFixed(2)} each
                       </p>
+                      {/* Direct Remove Button */}
                       <button
                         onClick={() => removeFromCart(item.id)}
-                        className="text-[9px] uppercase tracking-wider text-rose-500 hover:text-rose-700 mt-1"
+                        className="text-[9px] uppercase tracking-wider font-semibold text-rose-500 hover:text-rose-700 mt-1.5 flex items-center gap-1 transition-colors"
                       >
-                        Remove
+                        <span>🗑</span> Remove Item
                       </button>
                     </div>
 
-                    <div className="flex items-center space-x-4">
-                      <div className={`flex items-center space-x-2 border rounded-full px-2.5 py-0.5 text-xs font-mono ${
+                    <div className="flex items-center space-x-3">
+                      {/* Quantity Controller */}
+                      <div className={`flex items-center space-x-2 border rounded-full px-2.5 py-1 text-xs font-mono ${
                         isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-white'
                       }`}>
-                        <button onClick={() => updateCartQty(item.id, -1)} className="hover:opacity-60 px-1">-</button>
-                        <span>{item.qty}</span>
-                        <button onClick={() => updateCartQty(item.id, 1)} className="hover:opacity-60 px-1">+</button>
+                        <button 
+                          onClick={() => updateCartQty(item.id, -1)} 
+                          className="hover:text-rose-500 font-bold px-1 transition-colors"
+                          title="Decrease quantity"
+                        >
+                          -
+                        </button>
+                        <span className="w-4 text-center font-semibold">{item.qty}</span>
+                        <button 
+                          onClick={() => updateCartQty(item.id, 1)} 
+                          className="hover:opacity-60 font-bold px-1 transition-colors"
+                          title="Increase quantity"
+                        >
+                          +
+                        </button>
                       </div>
-                      <span className="text-xs font-mono font-semibold min-w-[50px] text-right">
+
+                      {/* Total Price Per Product Line */}
+                      <span className="text-xs font-mono font-semibold min-w-[55px] text-right">
                         ${(item.price * item.qty).toFixed(2)}
                       </span>
                     </div>
@@ -786,6 +1047,7 @@ export default function Home() {
               )}
             </div>
 
+            {/* Cart Footer */}
             {cart.length > 0 && (
               <div className={`p-6 border-t space-y-4 ${isDarkMode ? 'border-stone-800 bg-stone-900/30' : 'border-stone-200 bg-stone-50/50'}`}>
                 <div className="space-y-1.5 text-xs font-mono">
@@ -1024,7 +1286,7 @@ export default function Home() {
                 <div className="w-14 h-14 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
                   ✓
                 </div>
-                <h3 className="text-xl font-medium tracking-tight mb-1">Order Confirmed!</h3>
+                <h3 className="text-xl font-medium tracking-tight mb-1">Order Saved & Confirmed!</h3>
                 <p className="text-xs text-stone-400 font-mono mb-6">Receipt ID: {receipt?.orderId}</p>
 
                 {receipt && (
