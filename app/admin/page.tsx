@@ -1,15 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
+
+// Add all authorized admin emails here
+const ADMIN_EMAILS = [
+  'your-admin-email@gmail.com', // <-- REPLACE WITH YOUR ADMIN EMAIL
+];
 
 interface OrderItem {
   id: number;
   product_id: number;
   quantity: number;
   unit_price: number;
-  products?: { name: string };
 }
 
 interface AdminOrder {
@@ -36,6 +41,13 @@ interface AdminProduct {
 }
 
 export default function AdminDashboard() {
+  const router = useRouter();
+
+  // Auth & Guard states
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+
+  // Tab & Data states
   const [activeTab, setActiveTab] = useState<'orders' | 'inventory'>('orders');
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [products, setProducts] = useState<AdminProduct[]>([]);
@@ -48,11 +60,39 @@ export default function AdminDashboard() {
     setTimeout(() => setActionMessage(null), 3000);
   };
 
-  // Fetch all orders and inventory items
+  // 1. Session verification guard
+  useEffect(() => {
+    async function verifyAdminAccess() {
+      const { data: { session } } = await supabase.auth.getSession();
+      const email = session?.user?.email;
+
+      if (!session || !email || !ADMIN_EMAILS.includes(email.toLowerCase())) {
+        setIsAuthorized(false);
+      } else {
+        setCurrentUserEmail(email);
+        setIsAuthorized(true);
+      }
+    }
+
+    verifyAdminAccess();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const email = session?.user?.email;
+      if (!session || !email || !ADMIN_EMAILS.includes(email.toLowerCase())) {
+        setIsAuthorized(false);
+      } else {
+        setCurrentUserEmail(email);
+        setIsAuthorized(true);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [router]);
+
+  // 2. Fetch data only when confirmed admin
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      // Fetch orders with associated line items
       const { data: ordersData, error: ordersErr } = await supabase
         .from('orders')
         .select(`
@@ -70,7 +110,6 @@ export default function AdminDashboard() {
         setOrders(ordersData as AdminOrder[]);
       }
 
-      // Fetch products
       const { data: prodData, error: prodErr } = await supabase
         .from('products')
         .select('id, name, category, price, stock_qty, is_available')
@@ -87,10 +126,12 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    if (isAuthorized) {
+      loadDashboardData();
+    }
+  }, [isAuthorized]);
 
-  // Update order status (Pending -> Dispatched -> Delivered -> Cancelled)
+  // 3. Update Order Status
   const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
     const { error } = await supabase
       .from('orders')
@@ -107,7 +148,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Update stock quantity
+  // 4. Update Stock Quantity
   const handleStockAdjust = async (productId: number, newQty: number) => {
     if (newQty < 0) return;
     const { error } = await supabase
@@ -125,7 +166,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Toggle item availability
+  // 5. Toggle Item Visibility
   const handleToggleAvailability = async (productId: number, currentStatus: boolean) => {
     const { error } = await supabase
       .from('products')
@@ -138,9 +179,39 @@ export default function AdminDashboard() {
       setProducts((prev) =>
         prev.map((p) => (p.id === productId ? { ...p, is_available: !currentStatus } : p))
       );
-      showNotice(`Product is now ${!currentStatus ? 'Visible' : 'Hidden'}`);
+      showNotice(`Product is now ${!currentStatus ? 'Live' : 'Hidden'}`);
     }
   };
+
+  // Loading state while checking authentication
+  if (isAuthorized === null) {
+    return (
+      <main className="min-h-screen bg-[#121212] flex items-center justify-center font-mono text-xs text-stone-400">
+        Verifying administrator credentials...
+      </main>
+    );
+  }
+
+  // Access Denied Screen
+  if (isAuthorized === false) {
+    return (
+      <main className="min-h-screen bg-[#121212] flex flex-col items-center justify-center p-6 text-center text-[#F3F2EE] font-mono">
+        <div className="w-12 h-12 rounded-full bg-rose-950 border border-rose-800 text-rose-400 flex items-center justify-center text-xl mb-4">
+          🔒
+        </div>
+        <h1 className="text-lg font-bold uppercase tracking-wider mb-2">Access Restricted</h1>
+        <p className="text-xs text-stone-400 max-w-sm mb-6 leading-relaxed">
+          The requested portal is restricted to authorized store administrators. Please sign in with an admin account on the storefront.
+        </p>
+        <Link
+          href="/"
+          className="px-5 py-2.5 rounded-xl bg-stone-100 text-stone-900 font-bold text-xs uppercase hover:bg-white transition-colors"
+        >
+          Return to Storefront
+        </Link>
+      </main>
+    );
+  }
 
   const filteredOrders = orders.filter((o) =>
     filterStatus === 'All' ? true : (o.status || 'Pending') === filterStatus
@@ -148,10 +219,9 @@ export default function AdminDashboard() {
 
   return (
     <main className="min-h-screen bg-[#121212] text-[#F3F2EE] font-sans antialiased p-6 sm:p-12">
-      
       {/* Toast Notice */}
       {actionMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-stone-100 text-stone-950 px-4 py-3 rounded-2xl shadow-xl text-xs font-mono font-medium">
+        <div className="fixed bottom-6 right-6 z-50 bg-stone-100 text-stone-950 px-4 py-3 rounded-2xl shadow-xl text-xs font-mono font-medium animate-fade-in">
           {actionMessage}
         </div>
       )}
@@ -161,11 +231,11 @@ export default function AdminDashboard() {
         <div>
           <div className="flex items-center space-x-3">
             <span className="text-xl font-bold tracking-wider font-mono">ZIEL STORE</span>
-            <span className="text-[10px] uppercase font-mono tracking-widest px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              Admin Portal
+            <span className="text-[10px] uppercase font-mono tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              Authenticated Admin
             </span>
           </div>
-          <p className="text-xs text-stone-400 mt-1">Live store fulfillment & inventory controller</p>
+          <p className="text-xs text-stone-400 mt-1">Logged in as: {currentUserEmail}</p>
         </div>
 
         <div className="flex items-center space-x-4">
