@@ -69,9 +69,10 @@ const INITIAL_PRODUCTS: Product[] = [
     id: 1,
     name: 'Ziel King Coconut Wine',
     category: 'Wines',
-    price: 32.00,
+    price: 32.0,
     tagline: 'Batch No. 04 — Artisanal Fermentation',
-    description: 'Slow-fermented naturally from fresh king coconut nectar. Features rich floral aromatics, subtle caramel warmth, and a smooth, balanced crisp finish. Best served chilled.',
+    description:
+      'Slow-fermented naturally from fresh king coconut nectar. Features rich floral aromatics, subtle caramel warmth, and a smooth, balanced crisp finish. Best served chilled.',
     isAvailable: true,
     image: '/images/wine.jpg',
     aspect: 'aspect-[4/5]',
@@ -88,9 +89,10 @@ const INITIAL_PRODUCTS: Product[] = [
     id: 2,
     name: 'Ziel Grit Heavy Duty Soap',
     category: 'Soaps',
-    price: 14.00,
+    price: 14.0,
     tagline: 'Mechanics Formula — Grease & Oil Removal',
-    description: 'Specially formulated cold-process soap designed to lift tough industrial grease, engine oil, rust, and dirt without drying out skin. Infused with natural exfoliants and pumice.',
+    description:
+      'Specially formulated cold-process soap designed to lift tough industrial grease, engine oil, rust, and dirt without drying out skin. Infused with natural exfoliants and pumice.',
     isAvailable: true,
     image: '/images/soap.jpg',
     aspect: 'aspect-[1/1]',
@@ -107,9 +109,10 @@ const INITIAL_PRODUCTS: Product[] = [
     id: 3,
     name: 'Botanical Cold-Process Soap',
     category: 'Soaps',
-    price: 10.00,
+    price: 10.0,
     tagline: 'Natural Oils & Hydrating Lipids',
-    description: 'Handcrafted moisturizing soap made with virgin coconut oil, essential botanical extracts, and rich nourishing lipids for gentle daily skin cleansing.',
+    description:
+      'Handcrafted moisturizing soap made with virgin coconut oil, essential botanical extracts, and rich nourishing lipids for gentle daily skin cleansing.',
     isAvailable: true,
     image: '/images/cleanser.jpg',
     aspect: 'aspect-[4/5]',
@@ -125,9 +128,10 @@ const INITIAL_PRODUCTS: Product[] = [
     id: 4,
     name: 'Reserve Coconut Vintage Wine',
     category: 'Wines',
-    price: 48.00,
+    price: 48.0,
     tagline: 'Aged 12 Months — Limited Edition',
-    description: 'A premium limited-edition reserve vintage aged in oak casks for 12 months. Delivers complex notes of toasted coconut, vanilla, and oak undertones.',
+    description:
+      'A premium limited-edition reserve vintage aged in oak casks for 12 months. Delivers complex notes of toasted coconut, vanilla, and oak undertones.',
     isAvailable: true,
     image: '/images/wine.jpg',
     aspect: 'aspect-[1/1]',
@@ -143,9 +147,10 @@ const INITIAL_PRODUCTS: Product[] = [
     id: 5,
     name: 'Industrial Hand Cleanser Bar',
     category: 'Soaps',
-    price: 12.00,
+    price: 12.0,
     tagline: 'Exfoliating Pumice & Citrus Oil',
-    description: 'Heavy-duty exfoliating bar infused with organic orange peel oils and fine volcanic pumice. Effortlessly dissolves inks, paints, and heavy grime.',
+    description:
+      'Heavy-duty exfoliating bar infused with organic orange peel oils and fine volcanic pumice. Effortlessly dissolves inks, paints, and heavy grime.',
     isAvailable: true,
     image: '/images/soap.jpg',
     aspect: 'aspect-[4/5]',
@@ -160,9 +165,10 @@ const INITIAL_PRODUCTS: Product[] = [
     id: 6,
     name: 'Ziel Store Signature Gift Set',
     category: 'Sets',
-    price: 65.00,
+    price: 65.0,
     tagline: 'Artisanal Wine & Cleanser Duo',
-    description: 'Our flagship signature bundle featuring 1 bottle of Batch No. 04 King Coconut Wine alongside 2 bars of handcrafted Ziel soaps in custom gift packaging.',
+    description:
+      'Our flagship signature bundle featuring 1 bottle of Batch No. 04 King Coconut Wine alongside 2 bars of handcrafted Ziel soaps in custom gift packaging.',
     isAvailable: true,
     image: '/images/wine.jpg',
     aspect: 'aspect-[16/10]',
@@ -299,9 +305,7 @@ export default function Home() {
             aspect: 'aspect-[4/5]',
             colorBgLight: 'bg-[#EFECE6]',
             colorBgDark: 'bg-[#22211F]',
-            specs: [
-              { label: 'Stock', value: `${item.stock_qty || 0} units` },
-            ],
+            specs: [{ label: 'Stock', value: `${item.stock_qty || 0} units` }],
           }));
           setProducts(mapped);
         }
@@ -373,8 +377,9 @@ export default function Home() {
 
   const filteredProducts = products.filter((product) => {
     const matchesCategory = selectedCategory === 'All Works' || product.category === selectedCategory;
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          product.tagline.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch =
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.tagline.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a, b) => {
     if (sortBy === 'low-to-high') return a.price - b.price;
@@ -537,10 +542,10 @@ export default function Home() {
 
   const totalCartItems = cart.reduce((acc, item) => acc + item.qty, 0);
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
-  const shippingFee = subtotal > 0 ? 5.00 : 0.00;
+  const shippingFee = subtotal > 0 ? 5.0 : 0.0;
   const grandTotal = subtotal + shippingFee;
 
-  // Place Order with optional Receipt Upload
+  // Complete Order placement with resilient filename sanitization & receipt storage
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
@@ -558,24 +563,28 @@ export default function Home() {
     try {
       // 1. Upload receipt if Bank Transfer
       if (shippingForm.paymentMethod === 'bank' && slipFile) {
-        const fileExt = slipFile.name.split('.').pop();
-        const fileName = `${orderNum}-${Date.now()}.${fileExt}`;
+        const fileExt = slipFile.name.split('.').pop() || 'png';
+        const cleanFileName = `${orderNum}-${Date.now()}.${fileExt}`.replace(/[^a-zA-Z0-9.-]/g, '_');
+
         const { error: uploadError } = await supabase.storage
           .from('receipts')
-          .upload(fileName, slipFile);
+          .upload(cleanFileName, slipFile, {
+            cacheControl: '3600',
+            upsert: true,
+          });
 
         if (uploadError) {
           console.error('Receipt upload error:', uploadError);
-          showNotification('Could not upload receipt image. Continuing order...');
+          showNotification(`Receipt upload notice: ${uploadError.message}`);
         } else {
           const { data: publicUrlData } = supabase.storage
             .from('receipts')
-            .getPublicUrl(fileName);
+            .getPublicUrl(cleanFileName);
           uploadedSlipUrl = publicUrlData.publicUrl;
         }
       }
 
-      // 2. Insert order
+      // 2. Insert order record into Supabase
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert([
@@ -601,7 +610,7 @@ export default function Home() {
         return;
       }
 
-      // 3. Insert items
+      // 3. Insert individual items
       if (orderData) {
         const orderItemsPayload = cart.map((item) => ({
           order_id: orderData.id,
@@ -610,9 +619,13 @@ export default function Home() {
           unit_price: item.price,
         }));
 
-        await supabase.from('order_items').insert(orderItemsPayload);
+        const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
+        if (itemsError) {
+          console.error('Line items saving error:', itemsError);
+        }
       }
 
+      // 4. Update state to show the order receipt
       const newReceipt: OrderReceipt = {
         orderId: orderNum,
         items: [...cart],
@@ -624,18 +637,21 @@ export default function Home() {
         city: shippingForm.city,
         phone: shippingForm.phone,
         receiptUrl: uploadedSlipUrl,
-        paymentMethod: 
-          shippingForm.paymentMethod === 'cod' ? 'Cash on Delivery' :
-          shippingForm.paymentMethod === 'card' ? 'Credit/Debit Card' : 'Direct Bank Transfer',
+        paymentMethod:
+          shippingForm.paymentMethod === 'cod'
+            ? 'Cash on Delivery'
+            : shippingForm.paymentMethod === 'card'
+            ? 'Credit/Debit Card'
+            : 'Direct Bank Transfer',
       };
 
       setReceipt(newReceipt);
       setCart([]);
       setSlipFile(null);
-      setIsCartOpen(false);
       setCheckoutStep('success');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Order submission failed:', err);
+      showNotification(`Submission failed: ${err?.message || 'Check connection'}`);
     } finally {
       setSubmittingOrder(false);
     }
@@ -650,7 +666,6 @@ export default function Home() {
 
   return (
     <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
-      
       {/* Toast Alert */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 px-4 py-3 rounded-2xl shadow-xl text-xs font-medium tracking-wide flex items-center space-x-2 animate-bounce">
@@ -669,9 +684,9 @@ export default function Home() {
       {/* Header */}
       <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3 flex items-center justify-between gap-2`}>
         <div className="flex items-center space-x-2 shrink-0">
-          <img 
-            src="/logo.png" 
-            alt="Ziel Store Logo" 
+          <img
+            src="/logo.png"
+            alt="Ziel Store Logo"
             className="h-6 sm:h-8 w-auto object-contain"
             onError={(e) => { e.currentTarget.style.display = 'none'; }}
           />
@@ -692,8 +707,8 @@ export default function Home() {
             onClick={() => setIsDarkMode(!isDarkMode)}
             title="Toggle Theme"
             className={`p-1.5 sm:p-2 rounded-full border transition-all flex items-center justify-center shrink-0 ${
-              isDarkMode 
-                ? 'bg-stone-800 border-stone-700 text-amber-300 hover:bg-stone-700' 
+              isDarkMode
+                ? 'bg-stone-800 border-stone-700 text-amber-300 hover:bg-stone-700'
                 : 'bg-stone-200/70 border-stone-300 text-stone-700 hover:bg-stone-300'
             }`}
           >
@@ -720,8 +735,8 @@ export default function Home() {
             <button
               onClick={() => { setIsAuthOpen(true); setAuthMode('signin'); }}
               className={`text-[10px] sm:text-xs uppercase tracking-wider font-semibold px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full border transition-all ${
-                isDarkMode 
-                  ? 'border-stone-700 hover:border-stone-500 text-stone-200' 
+                isDarkMode
+                  ? 'border-stone-700 hover:border-stone-500 text-stone-200'
                   : 'border-stone-300 hover:border-stone-400 text-stone-800'
               }`}
             >
@@ -732,8 +747,8 @@ export default function Home() {
           <button
             onClick={() => setIsCartOpen(true)}
             className={`group flex items-center space-x-1.5 sm:space-x-2.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wider px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all shadow-sm ${
-              isDarkMode 
-                ? 'bg-[#F0EFEA] text-[#141413] hover:bg-white' 
+              isDarkMode
+                ? 'bg-[#F0EFEA] text-[#141413] hover:bg-white'
                 : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
             }`}
           >
@@ -784,8 +799,8 @@ export default function Home() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={`w-full px-4 py-2 text-xs rounded-full border focus:outline-none transition-colors ${
-                  isDarkMode 
-                    ? 'bg-stone-900 border-stone-700 text-stone-100 placeholder-stone-500 focus:border-stone-500' 
+                  isDarkMode
+                    ? 'bg-stone-900 border-stone-700 text-stone-100 placeholder-stone-500 focus:border-stone-500'
                     : 'bg-white border-stone-300 text-stone-900 placeholder-stone-400 focus:border-stone-800'
                 }`}
               />
@@ -804,8 +819,8 @@ export default function Home() {
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as Currency)}
                 className={`w-full sm:w-auto px-4 py-2 rounded-full border text-xs font-mono font-medium focus:outline-none cursor-pointer transition-colors ${
-                  isDarkMode 
-                    ? 'bg-stone-900 border-stone-700 text-stone-300 hover:border-stone-600' 
+                  isDarkMode
+                    ? 'bg-stone-900 border-stone-700 text-stone-300 hover:border-stone-600'
                     : 'bg-white border-stone-300 text-stone-700 hover:border-stone-400'
                 }`}
                 title="Select store currency"
