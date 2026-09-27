@@ -545,7 +545,7 @@ export default function Home() {
   const shippingFee = subtotal > 0 ? 5.0 : 0.0;
   const grandTotal = subtotal + shippingFee;
 
-  // Complete Order placement with resilient filename sanitization & receipt storage
+  // Resilient Order Placement with Bank Slip Upload
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
@@ -580,7 +580,7 @@ export default function Home() {
           const { data: publicUrlData } = supabase.storage
             .from('receipts')
             .getPublicUrl(cleanFileName);
-          uploadedSlipUrl = publicUrlData.publicUrl;
+          uploadedSlipUrl = publicUrlData?.publicUrl || null;
         }
       }
 
@@ -598,9 +598,10 @@ export default function Home() {
             city: shippingForm.city,
             phone: shippingForm.phone,
             receipt_url: uploadedSlipUrl,
+            status: 'Pending',
           },
         ])
-        .select()
+        .select('id, order_number, total_amount')
         .single();
 
       if (orderError) {
@@ -611,7 +612,7 @@ export default function Home() {
       }
 
       // 3. Insert individual items
-      if (orderData) {
+      if (orderData?.id) {
         const orderItemsPayload = cart.map((item) => ({
           order_id: orderData.id,
           product_id: item.id,
@@ -621,7 +622,7 @@ export default function Home() {
 
         const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
         if (itemsError) {
-          console.error('Line items saving error:', itemsError);
+          console.error('Line items saving warning:', itemsError);
         }
       }
 
@@ -651,7 +652,7 @@ export default function Home() {
       setCheckoutStep('success');
     } catch (err: any) {
       console.error('Order submission failed:', err);
-      showNotification(`Submission failed: ${err?.message || 'Check connection'}`);
+      showNotification(`Submission failed: ${err?.message || 'Check database connection'}`);
     } finally {
       setSubmittingOrder(false);
     }
