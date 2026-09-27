@@ -31,6 +31,7 @@ interface AdminOrder {
 interface AdminProduct {
   id: number;
   name: string;
+  slug?: string;
   category: string;
   price: number;
   stock_qty: number;
@@ -255,7 +256,7 @@ export default function AdminDashboard() {
     try {
       let finalImageUrl = editForm.image_url;
 
-      // If user selected a new replacement image file
+      // If user provided a new replacement image file
       if (editImageFile) {
         const fileExt = editImageFile.name.split('.').pop() || 'png';
         const cleanFileName = `prod_${editingProduct.id}_${Date.now()}.${fileExt}`.replace(/[^a-zA-Z0-9.-]/g, '_');
@@ -278,8 +279,15 @@ export default function AdminDashboard() {
         }
       }
 
+      // Generate or preserve clean slug
+      const generatedSlug = editForm.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '');
+
       const updatePayload = {
         name: editForm.name.trim(),
+        slug: generatedSlug,
         category: editForm.category,
         price: parseFloat(editForm.price) || 0,
         stock_qty: parseInt(editForm.stock_qty, 10) || 0,
@@ -311,7 +319,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Add New Product with Image Upload
+  // Add New Product with Slug Generation and Image Upload
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmittingProduct(true);
@@ -320,7 +328,7 @@ export default function AdminDashboard() {
     try {
       if (productImageFile) {
         const fileExt = productImageFile.name.split('.').pop() || 'png';
-        const cleanFileName = `prod_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${fileExt}`;
+        const cleanFileName = `prod_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${fileExt}`.replace(/[^a-zA-Z0-9.-]/g, '_');
 
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('product-images')
@@ -331,7 +339,7 @@ export default function AdminDashboard() {
 
         if (uploadErr) {
           console.error('Image upload failed:', uploadErr);
-          showNotice(`Image upload warning: ${uploadErr.message}`);
+          showNotice(`Image upload notice: ${uploadErr.message}`);
         } else if (uploadData) {
           const { data: publicData } = supabase.storage
             .from('product-images')
@@ -340,8 +348,16 @@ export default function AdminDashboard() {
         }
       }
 
+      // Generate a clean slug to satisfy the NOT NULL constraint on products.slug
+      const baseSlug = newProductForm.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '');
+      const generatedSlug = `${baseSlug || 'product'}-${Date.now().toString().slice(-4)}`;
+
       const payload = {
         name: newProductForm.name.trim(),
+        slug: generatedSlug,
         category: newProductForm.category,
         price: parseFloat(newProductForm.price) || 0,
         stock_qty: parseInt(newProductForm.stock_qty, 10) || 0,
@@ -371,7 +387,7 @@ export default function AdminDashboard() {
           description: '',
         });
         setProductImageFile(null);
-        showNotice('New product added to catalog!');
+        showNotice('New product published successfully!');
       }
     } catch (err: any) {
       alert(`Error: ${err.message || 'Unexpected failure'}`);
