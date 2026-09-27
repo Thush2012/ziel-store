@@ -35,6 +35,9 @@ interface AdminProduct {
   price: number;
   stock_qty: number;
   is_available: boolean;
+  tagline?: string;
+  description?: string;
+  image_url?: string;
 }
 
 export default function AdminDashboard() {
@@ -50,12 +53,25 @@ export default function AdminDashboard() {
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('All');
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionMessage, showNotificationMessage] = useState<string | null>(null);
   const [previewSlipUrl, setPreviewSlipUrl] = useState<string | null>(null);
 
+  // New Product Modal State
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [submittingProduct, setSubmittingProduct] = useState(false);
+  const [newProductForm, setNewProductForm] = useState({
+    name: '',
+    category: 'Wines',
+    price: '',
+    stock_qty: '',
+    tagline: '',
+    description: '',
+  });
+  const [productImageFile, setProductImageFile] = useState<File | null>(null);
+
   const showNotice = (msg: string) => {
-    setActionMessage(msg);
-    setTimeout(() => setActionMessage(null), 3000);
+    showNotificationMessage(msg);
+    setTimeout(() => showNotificationMessage(null), 3500);
   };
 
   useEffect(() => {
@@ -133,7 +149,7 @@ export default function AdminDashboard() {
 
       const { data: prodData, error: prodErr } = await supabase
         .from('products')
-        .select('id, name, category, price, stock_qty, is_available')
+        .select('*')
         .order('id', { ascending: true });
 
       if (!prodErr && prodData) {
@@ -185,6 +201,30 @@ export default function AdminDashboard() {
     }
   };
 
+  const handlePriceUpdate = async (productId: number, currentPrice: number) => {
+    const input = prompt('Enter new price (USD):', currentPrice.toString());
+    if (input === null) return;
+    const newPrice = parseFloat(input);
+    if (isNaN(newPrice) || newPrice <= 0) {
+      alert('Please enter a valid positive price.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('products')
+      .update({ price: newPrice })
+      .eq('id', productId);
+
+    if (error) {
+      showNotice(`Price update failed: ${error.message}`);
+    } else {
+      setProducts((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, price: newPrice } : p))
+      );
+      showNotice('Product price updated');
+    }
+  };
+
   const handleToggleAvailability = async (productId: number, currentStatus: boolean) => {
     const { error } = await supabase
       .from('products')
@@ -198,6 +238,75 @@ export default function AdminDashboard() {
         prev.map((p) => (p.id === productId ? { ...p, is_available: !currentStatus } : p))
       );
       showNotice(`Product is now ${!currentStatus ? 'Live' : 'Hidden'}`);
+    }
+  };
+
+  // Add New Product with Image Upload
+  const handleCreateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingProduct(true);
+    let imageUrl: string | null = null;
+
+    try {
+      if (productImageFile) {
+        const fileExt = productImageFile.name.split('.').pop() || 'png';
+        const cleanFileName = `prod_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${fileExt}`;
+
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('product-images')
+          .upload(cleanFileName, productImageFile, {
+            cacheControl: '3600',
+            upsert: true,
+          });
+
+        if (uploadErr) {
+          console.error('Image upload failed:', uploadErr);
+          showNotice(`Image upload warning: ${uploadErr.message}`);
+        } else if (uploadData) {
+          const { data: publicData } = supabase.storage
+            .from('product-images')
+            .getPublicUrl(cleanFileName);
+          imageUrl = publicData?.publicUrl || null;
+        }
+      }
+
+      const payload = {
+        name: newProductForm.name.trim(),
+        category: newProductForm.category,
+        price: parseFloat(newProductForm.price) || 0,
+        stock_qty: parseInt(newProductForm.stock_qty, 10) || 0,
+        tagline: newProductForm.tagline.trim(),
+        description: newProductForm.description.trim(),
+        image_url: imageUrl || '/images/wine.jpg',
+        is_available: true,
+      };
+
+      const { data, error } = await supabase
+        .from('products')
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) {
+        alert(`Failed to add product: ${error.message}`);
+      } else if (data) {
+        setProducts((prev) => [...prev, data as AdminProduct]);
+        setIsAddProductOpen(false);
+        setNewProductForm({
+          name: '',
+          category: 'Wines',
+          price: '',
+          stock_qty: '',
+          tagline: '',
+          description: '',
+        });
+        setProductImageFile(null);
+        showNotice('New product added to catalog!');
+      }
+    } catch (err: any) {
+      alert(`Error: ${err.message || 'Unexpected failure'}`);
+    } finally {
+      setSubmittingProduct(false);
     }
   };
 
@@ -281,17 +390,17 @@ export default function AdminDashboard() {
 
       {/* Slip Preview Modal */}
       {previewSlipUrl && (
-        <div 
+        <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
           onClick={() => setPreviewSlipUrl(null)}
         >
-          <div 
+          <div
             className="max-w-2xl w-full bg-[#1A1918] border border-stone-800 p-6 rounded-3xl overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-sm font-mono uppercase tracking-wider text-white">Bank Transfer Slip</h3>
-              <button 
+              <button
                 onClick={() => setPreviewSlipUrl(null)}
                 className="text-stone-400 hover:text-white text-sm"
               >
@@ -299,12 +408,128 @@ export default function AdminDashboard() {
               </button>
             </div>
             <div className="max-h-[70vh] overflow-auto flex items-center justify-center bg-black/40 rounded-xl p-2">
-              <img 
-                src={previewSlipUrl} 
-                alt="Deposit Slip" 
+              <img
+                src={previewSlipUrl}
+                alt="Deposit Slip"
                 className="max-h-[65vh] w-auto object-contain rounded-lg"
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Product Modal */}
+      {isAddProductOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setIsAddProductOpen(false)}
+        >
+          <div
+            className="max-w-md w-full bg-[#1A1918] border border-stone-800 p-6 sm:p-8 rounded-3xl shadow-2xl my-auto text-xs font-mono"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-white">Add New Product</h3>
+              <button onClick={() => setIsAddProductOpen(false)} className="text-stone-400 hover:text-white">✕</button>
+            </div>
+
+            <form onSubmit={handleCreateProduct} className="space-y-4">
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Product Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. King Coconut Wine Reserve"
+                  value={newProductForm.name}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Category</label>
+                  <select
+                    value={newProductForm.category}
+                    onChange={(e) => setNewProductForm({ ...newProductForm, category: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="Wines">Wines</option>
+                    <option value="Soaps">Soaps</option>
+                    <option value="Sets">Sets</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Price (USD) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    placeholder="32.00"
+                    value={newProductForm.price}
+                    onChange={(e) => setNewProductForm({ ...newProductForm, price: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Initial Stock Qty</label>
+                <input
+                  type="number"
+                  placeholder="50"
+                  value={newProductForm.stock_qty}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, stock_qty: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Tagline</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Batch No. 05 — Reserve"
+                  value={newProductForm.tagline}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, tagline: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  placeholder="Briefly describe the product and ingredients..."
+                  value={newProductForm.description}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, description: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Product Image</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setProductImageFile(e.target.files[0]);
+                    }
+                  }}
+                  className="w-full text-[11px] text-stone-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-mono file:bg-amber-500 file:text-stone-950 file:cursor-pointer"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={submittingProduct}
+                className={`w-full py-3.5 rounded-xl uppercase tracking-widest font-bold bg-amber-500 text-stone-950 hover:bg-amber-400 transition-colors mt-2 ${
+                  submittingProduct ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                {submittingProduct ? 'Creating Product...' : 'Publish Product'}
+              </button>
+            </form>
           </div>
         </div>
       )}
@@ -344,27 +569,39 @@ export default function AdminDashboard() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="max-w-7xl mx-auto my-6 flex space-x-3">
-        <button
-          onClick={() => setActiveTab('orders')}
-          className={`px-5 py-2.5 rounded-xl text-xs uppercase font-mono tracking-wider transition-all ${
-            activeTab === 'orders'
-              ? 'bg-stone-100 text-stone-900 font-bold'
-              : 'bg-stone-900 text-stone-400 hover:bg-stone-800'
-          }`}
-        >
-          Customer Orders ({orders.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('inventory')}
-          className={`px-5 py-2.5 rounded-xl text-xs uppercase font-mono tracking-wider transition-all ${
-            activeTab === 'inventory'
-              ? 'bg-stone-100 text-stone-900 font-bold'
-              : 'bg-stone-900 text-stone-400 hover:bg-stone-800'
-          }`}
-        >
-          Inventory & Stock ({products.length})
-        </button>
+      <div className="max-w-7xl mx-auto my-6 flex justify-between items-center">
+        <div className="flex space-x-3">
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`px-5 py-2.5 rounded-xl text-xs uppercase font-mono tracking-wider transition-all ${
+              activeTab === 'orders'
+                ? 'bg-stone-100 text-stone-900 font-bold'
+                : 'bg-stone-900 text-stone-400 hover:bg-stone-800'
+            }`}
+          >
+            Customer Orders ({orders.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('inventory')}
+            className={`px-5 py-2.5 rounded-xl text-xs uppercase font-mono tracking-wider transition-all ${
+              activeTab === 'inventory'
+                ? 'bg-stone-100 text-stone-900 font-bold'
+                : 'bg-stone-900 text-stone-400 hover:bg-stone-800'
+            }`}
+          >
+            Inventory & Stock ({products.length})
+          </button>
+        </div>
+
+        {activeTab === 'inventory' && (
+          <button
+            onClick={() => setIsAddProductOpen(true)}
+            className="px-4 py-2.5 rounded-xl text-xs uppercase font-mono font-bold tracking-wider bg-amber-500 text-stone-950 hover:bg-amber-400 transition-colors shadow-md flex items-center space-x-1.5"
+          >
+            <span>+</span>
+            <span>Add Product</span>
+          </button>
+        )}
       </div>
 
       <div className="max-w-7xl mx-auto">
@@ -476,23 +713,48 @@ export default function AdminDashboard() {
         ) : (
           <div className="bg-stone-900/60 rounded-2xl border border-stone-800 overflow-hidden font-mono text-xs">
             <div className="grid grid-cols-12 bg-stone-900 p-4 font-bold border-b border-stone-800 text-stone-400 uppercase text-[10px] tracking-wider">
-              <div className="col-span-5">Product</div>
+              <div className="col-span-4">Product</div>
               <div className="col-span-2">Category</div>
               <div className="col-span-2">Price</div>
               <div className="col-span-2">Stock Control</div>
-              <div className="col-span-1 text-right">Visibility</div>
+              <div className="col-span-2 text-right">Visibility</div>
             </div>
 
             <div className="divide-y divide-stone-800/60">
               {products.map((prod) => (
                 <div key={prod.id} className="grid grid-cols-12 p-4 items-center gap-2">
-                  <div className="col-span-5 font-semibold text-white">
-                    {prod.name}
-                    <span className="block text-[10px] font-normal text-stone-500">ID: #{prod.id}</span>
+                  <div className="col-span-4 flex items-center space-x-3">
+                    {prod.image_url ? (
+                      <img
+                        src={prod.image_url}
+                        alt={prod.name}
+                        className="w-10 h-10 object-contain rounded-lg bg-stone-800/80 p-1 border border-stone-700/60"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-stone-800 flex items-center justify-center text-stone-600">
+                        📦
+                      </div>
+                    )}
+                    <div>
+                      <span className="font-semibold text-white block">{prod.name}</span>
+                      <span className="text-[10px] text-stone-500">ID: #{prod.id}</span>
+                    </div>
                   </div>
+
                   <div className="col-span-2 text-stone-400">{prod.category}</div>
-                  <div className="col-span-2 text-stone-300 font-bold">${Number(prod.price).toFixed(2)}</div>
-                  
+
+                  <div className="col-span-2 flex items-center space-x-2">
+                    <span className="text-stone-300 font-bold">${Number(prod.price).toFixed(2)}</span>
+                    <button
+                      onClick={() => handlePriceUpdate(prod.id, Number(prod.price))}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white"
+                      title="Edit Price"
+                    >
+                      ✎
+                    </button>
+                  </div>
+
                   <div className="col-span-2 flex items-center space-x-2">
                     <button
                       onClick={() => handleStockAdjust(prod.id, (prod.stock_qty || 0) - 1)}
@@ -511,7 +773,7 @@ export default function AdminDashboard() {
                     </button>
                   </div>
 
-                  <div className="col-span-1 text-right">
+                  <div className="col-span-2 text-right">
                     <button
                       onClick={() => handleToggleAvailability(prod.id, prod.is_available)}
                       className={`text-[10px] px-2.5 py-1 rounded-md uppercase font-bold transition-colors ${
