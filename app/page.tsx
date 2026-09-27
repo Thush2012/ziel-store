@@ -610,7 +610,7 @@ export default function Home() {
 
       if (orderError) {
         console.error('Supabase Order Insert Error:', orderError);
-        alert(`Order placement failed: ${orderError.message}`);
+        alert(`Order placement failed: ${orderError.message} | Details: ${orderError.details || 'none'} | Hint: ${orderError.hint || 'none'}`);
         setSubmittingOrder(false);
         return;
       }
@@ -667,6 +667,7 @@ export default function Home() {
     } finally {
       setSubmittingOrder(false);
     }
+
   };
 
 
