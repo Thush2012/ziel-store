@@ -57,7 +57,6 @@ export default function AdminDashboard() {
   const [actionMessage, showNotificationMessage] = useState<string | null>(null);
   const [previewSlipUrl, setPreviewSlipUrl] = useState<string | null>(null);
 
-  // New Product Modal State
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [submittingProduct, setSubmittingProduct] = useState(false);
   const [newProductForm, setNewProductForm] = useState({
@@ -70,7 +69,6 @@ export default function AdminDashboard() {
   });
   const [productImageFile, setProductImageFile] = useState<File | null>(null);
 
-  // Edit Product Modal State
   const [editingProduct, setEditingProduct] = useState<AdminProduct | null>(null);
   const [editForm, setEditForm] = useState({
     name: '',
@@ -232,7 +230,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Open Edit Modal for an Existing Product
   const handleOpenEditProduct = (prod: AdminProduct) => {
     setEditingProduct(prod);
     setEditForm({
@@ -247,7 +244,6 @@ export default function AdminDashboard() {
     setEditImageFile(null);
   };
 
-  // Submit Updated Product Data
   const handleSaveProductEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
@@ -256,7 +252,6 @@ export default function AdminDashboard() {
     try {
       let finalImageUrl = editForm.image_url;
 
-      // If user provided a new replacement image file
       if (editImageFile) {
         const fileExt = editImageFile.name.split('.').pop() || 'png';
         const cleanFileName = `prod_${editingProduct.id}_${Date.now()}.${fileExt}`.replace(/[^a-zA-Z0-9.-]/g, '_');
@@ -279,7 +274,6 @@ export default function AdminDashboard() {
         }
       }
 
-      // Generate or preserve clean slug
       const generatedSlug = editForm.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -319,7 +313,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Add New Product with Slug Generation and Image Upload
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmittingProduct(true);
@@ -348,7 +341,6 @@ export default function AdminDashboard() {
         }
       }
 
-      // Generate a clean slug to satisfy the NOT NULL constraint on products.slug
       const baseSlug = newProductForm.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -474,7 +466,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Slip Preview Modal */}
       {previewSlipUrl && (
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
@@ -486,10 +477,7 @@ export default function AdminDashboard() {
           >
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-sm font-mono uppercase tracking-wider text-white">Bank Transfer Slip</h3>
-              <button
-                onClick={() => setPreviewSlipUrl(null)}
-                className="text-stone-400 hover:text-white text-sm"
-              >
+              <button onClick={() => setPreviewSlipUrl(null)} className="text-stone-400 hover:text-white text-sm">
                 ✕ Close
               </button>
             </div>
@@ -504,7 +492,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* EDIT PRODUCT MODAL */}
       {editingProduct && (
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
@@ -590,18 +577,11 @@ export default function AdminDashboard() {
                 />
               </div>
 
-              {/* Product Image Section */}
               <div className="pt-2 border-t border-stone-800">
-                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">
-                  Change Product Image
-                </label>
+                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Change Product Image</label>
                 {editForm.image_url && (
                   <div className="flex items-center space-x-3 mb-2 p-2 bg-stone-900 rounded-xl border border-stone-800">
-                    <img
-                      src={editForm.image_url}
-                      alt="Current"
-                      className="w-10 h-10 object-contain rounded bg-black/40 p-1"
-                    />
+                    <img src={editForm.image_url} alt="Current" className="w-10 h-10 object-contain rounded bg-black/40 p-1" />
                     <span className="text-[10px] text-stone-400 truncate">Current Image Active</span>
                   </div>
                 )}
@@ -641,7 +621,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Add Product Modal */}
       {isAddProductOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
@@ -757,7 +736,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Header */}
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center pb-8 border-b border-stone-800 gap-4">
         <div>
           <div className="flex items-center space-x-3">
@@ -770,36 +748,24 @@ export default function AdminDashboard() {
         </div>
 
         <div className="flex items-center space-x-4">
-          <Link
-            href="/"
-            className="text-xs uppercase tracking-wider font-mono text-stone-400 hover:text-white transition-colors"
-          >
+          <Link href="/" className="text-xs uppercase tracking-wider font-mono text-stone-400 hover:text-white transition-colors">
             ← Storefront
           </Link>
-          <button
-            onClick={loadDashboardData}
-            className="px-4 py-2 rounded-xl text-xs font-mono uppercase bg-stone-800 hover:bg-stone-700 transition-colors"
-          >
+          <button onClick={loadDashboardData} className="px-4 py-2 rounded-xl text-xs font-mono uppercase bg-stone-800 hover:bg-stone-700 transition-colors">
             Refresh
           </button>
-          <button
-            onClick={handleAdminLogout}
-            className="px-4 py-2 rounded-xl text-xs font-mono uppercase bg-rose-950/80 border border-rose-800 text-rose-300 hover:bg-rose-900 transition-colors"
-          >
+          <button onClick={handleAdminLogout} className="px-4 py-2 rounded-xl text-xs font-mono uppercase bg-rose-950/80 border border-rose-800 text-rose-300 hover:bg-rose-900 transition-colors">
             Logout
           </button>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
       <div className="max-w-7xl mx-auto my-6 flex justify-between items-center">
         <div className="flex space-x-3">
           <button
             onClick={() => setActiveTab('orders')}
             className={`px-5 py-2.5 rounded-xl text-xs uppercase font-mono tracking-wider transition-all ${
-              activeTab === 'orders'
-                ? 'bg-stone-100 text-stone-900 font-bold'
-                : 'bg-stone-900 text-stone-400 hover:bg-stone-800'
+              activeTab === 'orders' ? 'bg-stone-100 text-stone-900 font-bold' : 'bg-stone-900 text-stone-400 hover:bg-stone-800'
             }`}
           >
             Customer Orders ({orders.length})
@@ -807,9 +773,7 @@ export default function AdminDashboard() {
           <button
             onClick={() => setActiveTab('inventory')}
             className={`px-5 py-2.5 rounded-xl text-xs uppercase font-mono tracking-wider transition-all ${
-              activeTab === 'inventory'
-                ? 'bg-stone-100 text-stone-900 font-bold'
-                : 'bg-stone-900 text-stone-400 hover:bg-stone-800'
+              activeTab === 'inventory' ? 'bg-stone-100 text-stone-900 font-bold' : 'bg-stone-900 text-stone-400 hover:bg-stone-800'
             }`}
           >
             Inventory & Stock ({products.length})
@@ -834,14 +798,12 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             <div className="flex flex-wrap items-center gap-2 pb-2">
               <span className="text-xs font-mono text-stone-500 mr-2">Filter Status:</span>
-              {['All', 'Pending', 'Dispatched', 'Delivered', 'Cancelled'].map((st) => (
+              {['All', 'Pending', 'Dispatched', 'Delivered', 'Cancelled', 'Freight Quote Pending'].map((st) => (
                 <button
                   key={st}
                   onClick={() => setFilterStatus(st)}
                   className={`text-xs font-mono px-3 py-1 rounded-lg border transition-colors ${
-                    filterStatus === st
-                      ? 'border-stone-400 bg-stone-800 text-white'
-                      : 'border-stone-800 bg-stone-900 text-stone-500 hover:border-stone-700'
+                    filterStatus === st ? 'border-stone-400 bg-stone-800 text-white' : 'border-stone-800 bg-stone-900 text-stone-500 hover:border-stone-700'
                   }`}
                 >
                   {st}
@@ -862,9 +824,7 @@ export default function AdminDashboard() {
                   >
                     <div className="space-y-2 flex-1">
                       <div className="flex items-center space-x-3">
-                        <span className="text-base font-bold text-white tracking-wider">
-                          {ord.order_number}
-                        </span>
+                        <span className="text-base font-bold text-white tracking-wider">{ord.order_number}</span>
                         <span className={`text-[10px] px-2.5 py-0.5 rounded-full uppercase font-bold ${
                           ord.status === 'Delivered'
                             ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
@@ -872,6 +832,8 @@ export default function AdminDashboard() {
                             ? 'bg-blue-950 text-blue-300 border border-blue-800'
                             : ord.status === 'Cancelled'
                             ? 'bg-rose-950 text-rose-300 border border-rose-800'
+                            : ord.status === 'Freight Quote Pending'
+                            ? 'bg-purple-950 text-purple-300 border border-purple-800'
                             : 'bg-amber-950 text-amber-300 border border-amber-800'
                         }`}>
                           {ord.status || 'Pending'}
@@ -891,8 +853,8 @@ export default function AdminDashboard() {
                         <div><strong className="text-stone-300">Date:</strong> {new Date(ord.created_at).toLocaleString()}</div>
                         <div><strong className="text-stone-300">Payment:</strong> {ord.payment_method.toUpperCase()}</div>
                         <div><strong className="text-stone-300">Phone:</strong> {ord.phone}</div>
-                        <div><strong className="text-stone-300">City:</strong> {ord.city}</div>
-                        <div className="sm:col-span-2"><strong className="text-stone-300">Address:</strong> {ord.shipping_address}</div>
+                        <div><strong className="text-stone-300">City / Country:</strong> {ord.city}</div>
+                        <div className="sm:col-span-2"><strong className="text-stone-300">Address & Zone:</strong> {ord.shipping_address}</div>
                       </div>
 
                       {ord.order_items && ord.order_items.length > 0 && (
@@ -922,6 +884,7 @@ export default function AdminDashboard() {
                           className="bg-stone-800 border border-stone-700 text-stone-200 text-xs rounded-xl px-3 py-2 focus:outline-none"
                         >
                           <option value="Pending">Pending</option>
+                          <option value="Freight Quote Pending">Freight Quote Pending</option>
                           <option value="Dispatched">Dispatched</option>
                           <option value="Delivered">Delivered</option>
                           <option value="Cancelled">Cancelled</option>
@@ -978,9 +941,7 @@ export default function AdminDashboard() {
                     >
                       -
                     </button>
-                    <span className="w-8 text-center font-bold text-stone-200">
-                      {prod.stock_qty ?? 0}
-                    </span>
+                    <span className="w-8 text-center font-bold text-stone-200">{prod.stock_qty ?? 0}</span>
                     <button
                       onClick={() => handleStockAdjust(prod.id, (prod.stock_qty || 0) + 1)}
                       className="w-6 h-6 rounded bg-stone-800 hover:bg-stone-700 flex items-center justify-center font-bold text-stone-300"
@@ -989,7 +950,6 @@ export default function AdminDashboard() {
                     </button>
                   </div>
 
-                  {/* Edit button & Visibility button */}
                   <div className="col-span-2 flex items-center justify-end space-x-2">
                     <button
                       onClick={() => handleOpenEditProduct(prod)}

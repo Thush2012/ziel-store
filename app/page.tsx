@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-// Product type definition
 interface Product {
   id: number;
   name: string;
@@ -19,7 +18,6 @@ interface Product {
   specs: { label: string; value: string }[];
 }
 
-// Order receipt type definition
 interface OrderReceipt {
   orderId: string;
   items: { id: number; name: string; price: number; qty: number }[];
@@ -32,9 +30,9 @@ interface OrderReceipt {
   phone: string;
   paymentMethod: string;
   receiptUrl?: string | null;
+  zoneName: string;
 }
 
-// Historic Order type definition
 interface PastOrder {
   id: string;
   order_number: string;
@@ -47,7 +45,6 @@ interface PastOrder {
   phone: string;
 }
 
-// Currency definition & exchange rates (Base: USD)
 type Currency = 'USD' | 'LKR' | 'EUR' | 'GBP';
 
 interface CurrencyConfig {
@@ -63,7 +60,23 @@ const CURRENCIES: Record<Currency, CurrencyConfig> = {
   GBP: { symbol: '£', rate: 0.78, decimals: 2 },
 };
 
-// Ziel Store Default / Fallback Product Data
+interface ShippingZone {
+  code: string;
+  name: string;
+  baseUsd: number;
+  freeThresholdUsd?: number;
+}
+
+const SHIPPING_ZONES: Record<string, ShippingZone> = {
+  LK_LOCAL: { code: 'LK_LOCAL', name: 'Sri Lanka (Colombo & Gampaha)', baseUsd: 1.35, freeThresholdUsd: 35 },
+  LK_OUT: { code: 'LK_OUT', name: 'Sri Lanka (Islandwide Outstation)', baseUsd: 1.85, freeThresholdUsd: 35 },
+  SAARC: { code: 'SAARC', name: 'India, Maldives, UAE & Middle East', baseUsd: 16.0 },
+  EU_UK: { code: 'EU_UK', name: 'United Kingdom & Europe', baseUsd: 24.0 },
+  US_CA: { code: 'US_CA', name: 'USA, Canada & Australia', baseUsd: 29.0 },
+  ROW: { code: 'ROW', name: 'Rest of the World (Tracked Air Export)', baseUsd: 34.0 },
+  CUSTOM: { code: 'CUSTOM', name: 'Bulk Order / Custom Freight (Negotiable)', baseUsd: 0 },
+};
+
 const INITIAL_PRODUCTS: Product[] = [
   {
     id: 1,
@@ -193,8 +206,8 @@ const FAQS = [
     a: 'Ziel Grit incorporates real volcanic pumice for physical exfoliation paired with natural citrus oils that break down heavy petroleum grease, rust, and printer ink.',
   },
   {
-    q: 'What are your delivery timelines within Sri Lanka?',
-    a: 'Orders are dispatched within 24 hours. Delivery takes 1–3 business days via registered courier across all major cities.',
+    q: 'What are your delivery timelines within Sri Lanka and internationally?',
+    a: 'Domestic orders are delivered within 1–3 business days. International courier shipments are dispatched tracked via air freight and arrive within 5–12 business days depending on customs clearance.',
   },
 ];
 
@@ -214,7 +227,6 @@ export default function Home() {
   const [modalQuantity, setModalQuantity] = useState<number>(1);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  // Supabase Auth States
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'verify-otp'>('signin');
   const [user, setUser] = useState<{ id: string; email: string; name: string } | null>(null);
@@ -225,15 +237,14 @@ export default function Home() {
 
   const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput);
 
-  // Order History States
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
   const [userOrders, setUserOrders] = useState<PastOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
-  // Checkout Flow States
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<'details' | 'success'>('details');
   const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [selectedZone, setSelectedZone] = useState<string>('LK_LOCAL');
   const [shippingForm, setShippingForm] = useState({
     fullName: '',
     phone: '',
@@ -290,9 +301,7 @@ export default function Home() {
           .select('*')
           .eq('is_available', true);
 
-        if (error) {
-          console.error('Supabase fetch error:', error);
-        } else if (data && data.length > 0) {
+        if (!error && data && data.length > 0) {
           const mapped: Product[] = data.map((item: any) => ({
             id: item.id,
             name: item.name,
@@ -329,7 +338,6 @@ export default function Home() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Failed to fetch orders:', error);
         showNotification('Unable to fetch orders');
       } else if (data) {
         setUserOrders(data as PastOrder[]);
@@ -346,16 +354,11 @@ export default function Home() {
     if (savedCart) {
       try { setCart(JSON.parse(savedCart)); } catch (e) { console.error(e); }
     }
-
     const savedTheme = localStorage.getItem('ziel_theme');
-    if (savedTheme) {
-      setIsDarkMode(savedTheme === 'dark');
-    }
+    if (savedTheme) setIsDarkMode(savedTheme === 'dark');
 
     const savedCurrency = localStorage.getItem('ziel_currency') as Currency;
-    if (savedCurrency && CURRENCIES[savedCurrency]) {
-      setCurrency(savedCurrency);
-    }
+    if (savedCurrency && CURRENCIES[savedCurrency]) setCurrency(savedCurrency);
   }, []);
 
   useEffect(() => {
@@ -421,9 +424,7 @@ export default function Home() {
     setCart((prevCart) => prevCart.filter((item) => item.id !== id));
   };
 
-  const clearCart = () => {
-    setCart([]);
-  };
+  const clearCart = () => setCart([]);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -441,9 +442,7 @@ export default function Home() {
         const { data, error } = await supabase.auth.signUp({
           email: emailInput,
           password: passwordInput,
-          options: {
-            data: { full_name: emailInput.split('@')[0] },
-          },
+          options: { data: { full_name: emailInput.split('@')[0] } },
         });
 
         if (error) {
@@ -451,7 +450,7 @@ export default function Home() {
         } else {
           if (!data.session) {
             setAuthMode('verify-otp');
-            showNotification('OTP code sent! Please check your email inbox.');
+            showNotification('OTP sent! Please check your email.');
           } else {
             showNotification('Account created successfully!');
             setIsAuthOpen(false);
@@ -494,7 +493,7 @@ export default function Home() {
       if (error) {
         showNotification(`Verification Failed: ${error.message}`);
       } else if (data?.session) {
-        showNotification('Email verified! You are now securely logged in.');
+        showNotification('Email verified! You are now logged in.');
         setIsAuthOpen(false);
         setOtpInput('');
         setPasswordInput('');
@@ -511,15 +510,11 @@ export default function Home() {
     if (!emailInput) return;
     setAuthLoading(true);
     try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: emailInput,
-      });
-
+      const { error } = await supabase.auth.resend({ type: 'signup', email: emailInput });
       if (error) {
         showNotification(`Resend Error: ${error.message}`);
       } else {
-        showNotification('A new OTP has been sent to your email.');
+        showNotification('A new OTP has been sent.');
       }
     } catch (err: any) {
       showNotification(err?.message || 'Could not resend OTP');
@@ -542,10 +537,18 @@ export default function Home() {
 
   const totalCartItems = cart.reduce((acc, item) => acc + item.qty, 0);
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
-  const shippingFee = subtotal > 0 ? 5.0 : 0.0;
+
+  const currentZone = SHIPPING_ZONES[selectedZone] || SHIPPING_ZONES.LK_LOCAL;
+
+  const shippingFee = (() => {
+    if (subtotal === 0) return 0;
+    if (currentZone.code === 'CUSTOM') return 0;
+    if (currentZone.freeThresholdUsd && subtotal >= currentZone.freeThresholdUsd) return 0;
+    return currentZone.baseUsd;
+  })();
+
   const grandTotal = subtotal + shippingFee;
 
-// Bulletproof Order Placement & Bank Slip Upload
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) {
@@ -564,7 +567,6 @@ export default function Home() {
     let uploadedSlipUrl: string | null = null;
 
     try {
-      // 1. Upload receipt slip if Bank Transfer
       if (shippingForm.paymentMethod === 'bank' && slipFile) {
         const fileExt = slipFile.name.split('.').pop()?.toLowerCase() || 'png';
         const cleanFileName = `slip_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
@@ -578,44 +580,40 @@ export default function Home() {
 
         if (uploadError) {
           console.error('Storage Upload Error:', uploadError);
-          // If storage fails, alert the user but continue with order creation
-          showNotification(`Slip upload failed: ${uploadError.message}`);
+          showNotification(`Receipt notice: ${uploadError.message}`);
         } else if (uploadData) {
-          const { data: urlData } = supabase.storage
-            .from('receipts')
-            .getPublicUrl(cleanFileName);
+          const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(cleanFileName);
           uploadedSlipUrl = urlData?.publicUrl || null;
         }
       }
 
-      // 2. Insert order record
+      const initialStatus = currentZone.code === 'CUSTOM' ? 'Freight Quote Pending' : 'Pending';
+
       const orderPayload = {
         order_number: orderNum,
         user_id: user?.id || null,
         total_amount: grandTotal,
         shipping_fee: shippingFee,
         payment_method: shippingForm.paymentMethod,
-        shipping_address: shippingForm.address,
+        shipping_address: `${shippingForm.address} [${currentZone.name}]`,
         city: shippingForm.city,
         phone: shippingForm.phone,
         receipt_url: uploadedSlipUrl,
-        status: 'Pending',
+        status: initialStatus,
       };
 
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert([orderPayload])
-        .select()
+        .select('id, order_number, total_amount')
         .single();
 
       if (orderError) {
-        console.error('Supabase Order Insert Error:', orderError);
-        alert(`Order placement failed: ${orderError.message} | Details: ${orderError.details || 'none'} | Hint: ${orderError.hint || 'none'}`);
+        alert(`Order placement error: ${orderError.message}`);
         setSubmittingOrder(false);
         return;
       }
 
-      // 3. Try to insert order_items (if foreign key fails, don't crash the order)
       if (orderData?.id) {
         try {
           const orderItemsPayload = cart.map((item) => ({
@@ -624,20 +622,12 @@ export default function Home() {
             quantity: item.qty,
             unit_price: item.price,
           }));
-
-          const { error: itemsError } = await supabase
-            .from('order_items')
-            .insert(orderItemsPayload);
-
-          if (itemsError) {
-            console.warn('Order items insert note:', itemsError.message);
-          }
+          await supabase.from('order_items').insert(orderItemsPayload);
         } catch (itemErr) {
-          console.warn('Order items bypass:', itemErr);
+          console.warn('Order items note:', itemErr);
         }
       }
 
-      // 4. Set receipt and transition to success view
       const newReceipt: OrderReceipt = {
         orderId: orderNum,
         items: [...cart],
@@ -649,6 +639,7 @@ export default function Home() {
         city: shippingForm.city,
         phone: shippingForm.phone,
         receiptUrl: uploadedSlipUrl,
+        zoneName: currentZone.name,
         paymentMethod:
           shippingForm.paymentMethod === 'cod'
             ? 'Cash on Delivery'
@@ -662,14 +653,11 @@ export default function Home() {
       setSlipFile(null);
       setCheckoutStep('success');
     } catch (err: any) {
-      console.error('Unexpected Order Error:', err);
       alert(`Unexpected error: ${err?.message || 'Check network connection'}`);
     } finally {
       setSubmittingOrder(false);
     }
-
   };
-
 
   const bgMain = isDarkMode ? 'bg-[#141413] text-[#F0EFEA]' : 'bg-[#FAF9F5] text-[#1C1B1A]';
   const headerBg = isDarkMode ? 'bg-[#141413]/80 border-stone-800' : 'bg-[#FAF9F5]/80 border-stone-200/60';
@@ -680,7 +668,6 @@ export default function Home() {
 
   return (
     <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
-      {/* Toast Alert */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 px-4 py-3 rounded-2xl shadow-xl text-xs font-medium tracking-wide flex items-center space-x-2 animate-bounce">
           <span>✨</span>
@@ -688,14 +675,12 @@ export default function Home() {
         </div>
       )}
 
-      {/* Top Banner */}
       <div className={`py-1.5 px-4 text-center text-[10px] uppercase font-mono tracking-widest border-b ${
         isDarkMode ? 'bg-stone-900 border-stone-800 text-stone-400' : 'bg-stone-100 border-stone-200 text-stone-600'
       }`}>
-        Batch No. 04 Now Available • Complimentary Island-Wide Shipping Over {formatPrice(50)}
+        Batch No. 04 Now Available • Worldwide Air Export & Islandwide Delivery
       </div>
 
-      {/* Header */}
       <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3 flex items-center justify-between gap-2`}>
         <div className="flex items-center space-x-2 shrink-0">
           <img
@@ -733,10 +718,12 @@ export default function Home() {
             <div className="flex items-center space-x-1">
               <button
                 onClick={fetchUserOrders}
-                className={`text-[10px] sm:text-xs font-mono px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full border max-w-[90px] sm:max-w-none truncate hover:opacity-80 transition-opacity ${isDarkMode ? 'border-stone-700 bg-stone-800 text-stone-200' : 'border-stone-300 bg-stone-100 text-stone-800'}`}
-                title="Click to view your orders"
+                className={`text-[10px] sm:text-xs font-mono px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full border max-w-[90px] sm:max-w-none truncate hover:opacity-80 transition-opacity ${
+                  isDarkMode ? 'border-stone-700 bg-stone-800 text-stone-200' : 'border-stone-300 bg-stone-100 text-stone-800'
+                }`}
+                title="View your orders"
               >
-                👤 {user.name} (Orders)
+                👤 {user.name}
               </button>
               <button
                 onClick={handleLogout}
@@ -776,17 +763,15 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Hero Showcase */}
       <section className="px-6 sm:px-12 pt-12 sm:pt-20 pb-10 sm:pb-12 max-w-7xl mx-auto">
         <p className={`text-[10px] sm:text-xs uppercase tracking-[0.25em] font-semibold mb-3 sm:mb-4 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
-          Handcrafted Essentials & Fermentations
+          Artisanal Fermentations & Handcrafted Formulations
         </p>
         <h1 className="text-3xl sm:text-6xl lg:text-7xl font-light tracking-[-0.03em] leading-[1.1] max-w-4xl">
           Thoughtfully created products built with <span className={`italic font-normal ${isDarkMode ? 'text-stone-400' : 'text-stone-600'}`}>precision & care.</span>
         </h1>
       </section>
 
-      {/* Categories, Search, Currency & Sorting */}
       <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pb-8 sm:pb-10">
         <div className={`flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b pb-6 ${
           isDarkMode ? 'border-stone-800' : 'border-stone-200/80'
@@ -861,7 +846,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Catalog Grid */}
       <section className="px-6 sm:px-12 max-w-7xl mx-auto pb-24">
         {filteredProducts.length === 0 ? (
           <div className="py-20 text-center">
@@ -933,7 +917,6 @@ export default function Home() {
         )}
       </section>
 
-      {/* Craftsmanship Section */}
       <section id="about" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800 bg-[#171615]' : 'border-stone-200/80 bg-[#F4F2EC]'}`}>
         <div className="max-w-7xl mx-auto">
           <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
@@ -967,7 +950,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ Section */}
       <section id="faq" className="py-16 sm:py-20 px-6 sm:px-12 max-w-5xl mx-auto">
         <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
           Answers & Information
@@ -1004,7 +986,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Contact Section */}
       <section id="contact" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800' : 'border-stone-200'}`}>
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
           <div>
@@ -1103,7 +1084,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Product Details Modal */}
       {activeProduct && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 transition-opacity overflow-y-auto"
@@ -1225,7 +1205,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Shopping Bag Drawer */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end">
           <div className="fixed inset-0" onClick={() => setIsCartOpen(false)} />
@@ -1244,12 +1223,7 @@ export default function Home() {
                     Clear All
                   </button>
                 )}
-                <button
-                  onClick={() => setIsCartOpen(false)}
-                  className="text-stone-400 hover:text-stone-600 text-lg"
-                >
-                  ✕
-                </button>
+                <button onClick={() => setIsCartOpen(false)} className="text-stone-400 hover:text-stone-600 text-lg">✕</button>
               </div>
             </div>
 
@@ -1264,9 +1238,7 @@ export default function Home() {
                   <div key={item.id} className="pt-4 first:pt-0 flex items-center justify-between gap-2">
                     <div className="flex-1 pr-2">
                       <h4 className="text-xs font-medium">{item.name}</h4>
-                      <p className="text-[10px] font-mono text-stone-400 mt-0.5">
-                        {formatPrice(item.price)} each
-                      </p>
+                      <p className="text-[10px] font-mono text-stone-400 mt-0.5">{formatPrice(item.price)} each</p>
                       <button
                         onClick={() => removeFromCart(item.id)}
                         className="text-[9px] uppercase tracking-wider font-semibold text-rose-500 hover:text-rose-700 mt-1.5 flex items-center gap-1 transition-colors"
@@ -1279,19 +1251,9 @@ export default function Home() {
                       <div className={`flex items-center space-x-2 border rounded-full px-2.5 py-1 text-xs font-mono ${
                         isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-stone-300 bg-white'
                       }`}>
-                        <button 
-                          onClick={() => updateCartQty(item.id, -1)} 
-                          className="hover:text-rose-500 font-bold px-1 transition-colors"
-                        >
-                          -
-                        </button>
+                        <button onClick={() => updateCartQty(item.id, -1)} className="hover:text-rose-500 font-bold px-1 transition-colors">-</button>
                         <span className="w-4 text-center font-semibold">{item.qty}</span>
-                        <button 
-                          onClick={() => updateCartQty(item.id, 1)} 
-                          className="hover:opacity-60 font-bold px-1 transition-colors"
-                        >
-                          +
-                        </button>
+                        <button onClick={() => updateCartQty(item.id, 1)} className="hover:opacity-60 font-bold px-1 transition-colors">+</button>
                       </div>
 
                       <span className="text-xs font-mono font-semibold min-w-[55px] text-right">
@@ -1311,11 +1273,11 @@ export default function Home() {
                     <span>{formatPrice(subtotal)}</span>
                   </div>
                   <div className="flex justify-between text-stone-400">
-                    <span>Estimated Shipping</span>
+                    <span>Base Shipping Estimate</span>
                     <span>{formatPrice(shippingFee)}</span>
                   </div>
                   <div className="flex justify-between text-sm font-semibold pt-2 border-t border-stone-200/20 text-current">
-                    <span>Total</span>
+                    <span>Estimated Total</span>
                     <span>{formatPrice(grandTotal)}</span>
                   </div>
                 </div>
@@ -1337,7 +1299,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* User Order History Modal */}
       {isOrdersOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
@@ -1395,7 +1356,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Supabase Auth Modal */}
       {isAuthOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1448,19 +1408,10 @@ export default function Home() {
                 </button>
 
                 <div className="flex justify-between items-center text-[10px] uppercase tracking-wider pt-2 border-t border-stone-200/20">
-                  <button
-                    type="button"
-                    onClick={handleResendOtp}
-                    disabled={authLoading}
-                    className="text-stone-400 hover:text-current underline"
-                  >
+                  <button type="button" onClick={handleResendOtp} disabled={authLoading} className="text-stone-400 hover:text-current underline">
                     Resend Code
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode('signup')}
-                    className="text-stone-400 hover:text-current underline"
-                  >
+                  <button type="button" onClick={() => setAuthMode('signup')} className="text-stone-400 hover:text-current underline">
                     Change Email
                   </button>
                 </div>
@@ -1479,25 +1430,16 @@ export default function Home() {
                       </span>
                     )}
                   </div>
-                  <div className="relative">
-                    <input
-                      type="email"
-                      required
-                      placeholder="your@email.com"
-                      value={emailInput}
-                      onChange={(e) => setEmailInput(e.target.value)}
-                      className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none transition-colors ${
-                        isEmailValid
-                          ? 'border-emerald-500/80 focus:border-emerald-500'
-                          : isDarkMode ? 'border-stone-700' : 'border-stone-300'
-                      } ${isDarkMode ? 'bg-stone-900 text-stone-100' : 'bg-white text-stone-900'}`}
-                    />
-                    {isEmailValid && (
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-emerald-500 font-bold">
-                        ✓
-                      </span>
-                    )}
-                  </div>
+                  <input
+                    type="email"
+                    required
+                    placeholder="your@email.com"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
+                      isEmailValid ? 'border-emerald-500/80 focus:border-emerald-500' : isDarkMode ? 'border-stone-700' : 'border-stone-300'
+                    } ${isDarkMode ? 'bg-stone-900 text-stone-100' : 'bg-white text-stone-900'}`}
+                  />
                 </div>
 
                 <div>
@@ -1523,11 +1465,7 @@ export default function Home() {
                     isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
                   } ${authLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  {authLoading
-                    ? 'Processing...'
-                    : authMode === 'signin'
-                    ? 'Sign In'
-                    : 'Send Verification OTP'}
+                  {authLoading ? 'Processing...' : authMode === 'signin' ? 'Sign In' : 'Send Verification OTP'}
                 </button>
 
                 <div className="mt-4 text-center">
@@ -1536,9 +1474,7 @@ export default function Home() {
                     onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
                     className="text-[10px] uppercase tracking-wider text-stone-400 hover:text-stone-600 underline"
                   >
-                    {authMode === 'signin'
-                      ? "Don't have an account? Register with OTP"
-                      : 'Already have an account? Sign In'}
+                    {authMode === 'signin' ? "Don't have an account? Register with OTP" : 'Already have an account? Sign In'}
                   </button>
                 </div>
               </form>
@@ -1547,7 +1483,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Checkout Modal */}
       {isCheckoutOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
@@ -1567,7 +1502,7 @@ export default function Home() {
                 <form onSubmit={handlePlaceOrder} className="space-y-4">
                   <div>
                     <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                      Full Name
+                      Full Name *
                     </label>
                     <input
                       type="text"
@@ -1581,10 +1516,47 @@ export default function Home() {
                     />
                   </div>
 
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
+                      Shipping Destination / Zone *
+                    </label>
+                    <select
+                      value={selectedZone}
+                      onChange={(e) => setSelectedZone(e.target.value)}
+                      className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
+                        isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
+                      }`}
+                    >
+                      <optgroup label="Sri Lanka Domestic Rates">
+                        <option value="LK_LOCAL">Sri Lanka — Colombo & Gampaha (Rs. 400 / ~1–2 Days)</option>
+                        <option value="LK_OUT">Sri Lanka — Islandwide Outstation (Rs. 550 / ~2–3 Days)</option>
+                      </optgroup>
+                      <optgroup label="International Tracked Air Courier">
+                        <option value="SAARC">India, Maldives, UAE & Middle East ($16.00 / ~5–7 Days)</option>
+                        <option value="EU_UK">United Kingdom & Europe ($24.00 / ~7–10 Days)</option>
+                        <option value="US_CA">USA, Canada & Australia ($29.00 / ~7–12 Days)</option>
+                        <option value="ROW">Rest of the World ($34.00 / ~10–14 Days)</option>
+                        <option value="CUSTOM">Bulk Commercial Export (Negotiable Freight Quote)</option>
+                      </optgroup>
+                    </select>
+
+                    {selectedZone === 'CUSTOM' ? (
+                      <p className="text-[10px] font-mono text-amber-500 mt-1.5">
+                        ℹ️ Custom freight weight quote will be finalized upon packaging. Initial checkout excludes shipping.
+                      </p>
+                    ) : (
+                      <p className="text-[10px] font-mono text-stone-400 mt-1">
+                        {shippingFee === 0 && subtotal > 0
+                          ? '🎉 Complimentary Free Delivery applied!'
+                          : `Calculated logistics fee: ${formatPrice(shippingFee)}`}
+                      </p>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                        Phone Number
+                        Contact Phone *
                       </label>
                       <input
                         type="tel"
@@ -1599,11 +1571,12 @@ export default function Home() {
                     </div>
                     <div>
                       <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                        City
+                        City & Country *
                       </label>
                       <input
                         type="text"
                         required
+                        placeholder="e.g. Colombo, London, Sydney"
                         value={shippingForm.city}
                         onChange={(e) => setShippingForm({ ...shippingForm, city: e.target.value })}
                         className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
@@ -1615,12 +1588,12 @@ export default function Home() {
 
                   <div>
                     <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                      Delivery Address
+                      Street Address & Postal Code *
                     </label>
                     <input
                       type="text"
                       required
-                      placeholder="Street name, house number..."
+                      placeholder="Street name, suite, house number, ZIP..."
                       value={shippingForm.address}
                       onChange={(e) => setShippingForm({ ...shippingForm, address: e.target.value })}
                       className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
@@ -1640,13 +1613,12 @@ export default function Home() {
                         isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
                       }`}
                     >
-                      <option value="cod">Cash on Delivery (COD)</option>
                       <option value="bank">Direct Bank Transfer</option>
+                      <option value="cod">Cash on Delivery (COD - Domestic only)</option>
                       <option value="card">Credit / Debit Card</option>
                     </select>
                   </div>
 
-                  {/* Bank Transfer Details & Slip Upload Block */}
                   {shippingForm.paymentMethod === 'bank' && (
                     <div className={`p-4 rounded-2xl border text-xs font-mono space-y-3 ${
                       isDarkMode ? 'bg-amber-950/20 border-amber-800/40 text-stone-300' : 'bg-amber-50/70 border-amber-200 text-stone-800'
@@ -1659,10 +1631,11 @@ export default function Home() {
                         <div><strong className="text-current">Branch:</strong> Katunayake Branch</div>
                         <div><strong className="text-current">Account Name:</strong> ZIEL STORE PVT LTD</div>
                         <div><strong className="text-current">Account Number:</strong> 8009234821</div>
+                        <div><strong className="text-current">SWIFT / BIC:</strong> CCEYLKLX (International)</div>
                       </div>
                       <div className="pt-2 border-t border-amber-500/20">
                         <label className="block text-[10px] uppercase font-bold tracking-wider mb-1.5 text-current">
-                          Upload Deposit Slip / Transfer Screenshot *
+                          Upload Deposit Slip / Screenshot *
                         </label>
                         <input
                           type="file"
@@ -1687,8 +1660,8 @@ export default function Home() {
                       <span>{formatPrice(subtotal)}</span>
                     </div>
                     <div className="flex justify-between text-stone-400">
-                      <span>Shipping</span>
-                      <span>{formatPrice(shippingFee)}</span>
+                      <span>Shipping ({currentZone.name.split('(')[0].trim()})</span>
+                      <span>{selectedZone === 'CUSTOM' ? 'Quote Pending' : formatPrice(shippingFee)}</span>
                     </div>
                     <div className="flex justify-between font-semibold pt-1 border-t border-stone-200/20 text-current">
                       <span>Total Amount</span>
@@ -1722,13 +1695,12 @@ export default function Home() {
                     <div className="border-b pb-2 mb-2 font-semibold">
                       Recipient: {receipt.customerName}
                     </div>
+                    <div>Destination: {receipt.zoneName}</div>
                     <div>Address: {receipt.address}, {receipt.city}</div>
                     <div>Phone: {receipt.phone}</div>
                     <div>Payment: {receipt.paymentMethod}</div>
                     {receipt.receiptUrl && (
-                      <div className="text-emerald-400">
-                        Deposit Slip: Attached ✓
-                      </div>
+                      <div className="text-emerald-400">Deposit Slip: Attached ✓</div>
                     )}
                     <div className="border-t pt-2 mt-2 space-y-1">
                       {receipt.items.map((it) => (
@@ -1762,7 +1734,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Minimal Footer */}
       <footer className={`border-t py-12 px-6 sm:px-12 text-center text-xs font-mono ${
         isDarkMode ? 'border-stone-800 text-stone-500' : 'border-stone-200/80 text-stone-400'
       }`}>
