@@ -69,6 +69,20 @@ export default function AdminDashboard() {
   });
   const [productImageFile, setProductImageFile] = useState<File | null>(null);
 
+  // Edit Product Modal State
+  const [editingProduct, setEditingProduct] = useState<AdminProduct | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    category: 'Wines',
+    price: '',
+    stock_qty: '',
+    tagline: '',
+    description: '',
+    image_url: '',
+  });
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [submittingEdit, setSubmittingEdit] = useState(false);
+
   const showNotice = (msg: string) => {
     showNotificationMessage(msg);
     setTimeout(() => showNotificationMessage(null), 3500);
@@ -201,30 +215,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const handlePriceUpdate = async (productId: number, currentPrice: number) => {
-    const input = prompt('Enter new price (USD):', currentPrice.toString());
-    if (input === null) return;
-    const newPrice = parseFloat(input);
-    if (isNaN(newPrice) || newPrice <= 0) {
-      alert('Please enter a valid positive price.');
-      return;
-    }
-
-    const { error } = await supabase
-      .from('products')
-      .update({ price: newPrice })
-      .eq('id', productId);
-
-    if (error) {
-      showNotice(`Price update failed: ${error.message}`);
-    } else {
-      setProducts((prev) =>
-        prev.map((p) => (p.id === productId ? { ...p, price: newPrice } : p))
-      );
-      showNotice('Product price updated');
-    }
-  };
-
   const handleToggleAvailability = async (productId: number, currentStatus: boolean) => {
     const { error } = await supabase
       .from('products')
@@ -238,6 +228,86 @@ export default function AdminDashboard() {
         prev.map((p) => (p.id === productId ? { ...p, is_available: !currentStatus } : p))
       );
       showNotice(`Product is now ${!currentStatus ? 'Live' : 'Hidden'}`);
+    }
+  };
+
+  // Open Edit Modal for an Existing Product
+  const handleOpenEditProduct = (prod: AdminProduct) => {
+    setEditingProduct(prod);
+    setEditForm({
+      name: prod.name,
+      category: prod.category || 'Wines',
+      price: prod.price.toString(),
+      stock_qty: (prod.stock_qty ?? 0).toString(),
+      tagline: prod.tagline || '',
+      description: prod.description || '',
+      image_url: prod.image_url || '',
+    });
+    setEditImageFile(null);
+  };
+
+  // Submit Updated Product Data
+  const handleSaveProductEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    setSubmittingEdit(true);
+
+    try {
+      let finalImageUrl = editForm.image_url;
+
+      // If user selected a new replacement image file
+      if (editImageFile) {
+        const fileExt = editImageFile.name.split('.').pop() || 'png';
+        const cleanFileName = `prod_${editingProduct.id}_${Date.now()}.${fileExt}`.replace(/[^a-zA-Z0-9.-]/g, '_');
+
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('product-images')
+          .upload(cleanFileName, editImageFile, {
+            cacheControl: '3600',
+            upsert: true,
+          });
+
+        if (uploadErr) {
+          console.error('Image upload failed:', uploadErr);
+          showNotice(`Image upload warning: ${uploadErr.message}`);
+        } else if (uploadData) {
+          const { data: publicData } = supabase.storage
+            .from('product-images')
+            .getPublicUrl(cleanFileName);
+          finalImageUrl = publicData?.publicUrl || finalImageUrl;
+        }
+      }
+
+      const updatePayload = {
+        name: editForm.name.trim(),
+        category: editForm.category,
+        price: parseFloat(editForm.price) || 0,
+        stock_qty: parseInt(editForm.stock_qty, 10) || 0,
+        tagline: editForm.tagline.trim(),
+        description: editForm.description.trim(),
+        image_url: finalImageUrl,
+      };
+
+      const { data, error } = await supabase
+        .from('products')
+        .update(updatePayload)
+        .eq('id', editingProduct.id)
+        .select()
+        .single();
+
+      if (error) {
+        alert(`Update failed: ${error.message}`);
+      } else if (data) {
+        setProducts((prev) =>
+          prev.map((p) => (p.id === editingProduct.id ? (data as AdminProduct) : p))
+        );
+        setEditingProduct(null);
+        showNotice(`Updated "${updatePayload.name}" successfully!`);
+      }
+    } catch (err: any) {
+      alert(`Error updating product: ${err.message || 'Unexpected failure'}`);
+    } finally {
+      setSubmittingEdit(false);
     }
   };
 
@@ -414,6 +484,143 @@ export default function AdminDashboard() {
                 className="max-h-[65vh] w-auto object-contain rounded-lg"
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PRODUCT MODAL */}
+      {editingProduct && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setEditingProduct(null)}
+        >
+          <div
+            className="max-w-md w-full bg-[#1A1918] border border-stone-800 p-6 sm:p-8 rounded-3xl shadow-2xl my-auto text-xs font-mono"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-white">Edit Product</h3>
+                <span className="text-[10px] text-stone-400">ID: #{editingProduct.id}</span>
+              </div>
+              <button onClick={() => setEditingProduct(null)} className="text-stone-400 hover:text-white">✕</button>
+            </div>
+
+            <form onSubmit={handleSaveProductEdit} className="space-y-4">
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Product Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Category</label>
+                  <select
+                    value={editForm.category}
+                    onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="Wines">Wines</option>
+                    <option value="Soaps">Soaps</option>
+                    <option value="Sets">Sets</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Price (USD) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editForm.price}
+                    onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Stock Quantity</label>
+                <input
+                  type="number"
+                  value={editForm.stock_qty}
+                  onChange={(e) => setEditForm({ ...editForm, stock_qty: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Tagline</label>
+                <input
+                  type="text"
+                  value={editForm.tagline}
+                  onChange={(e) => setEditForm({ ...editForm, tagline: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {/* Product Image Section */}
+              <div className="pt-2 border-t border-stone-800">
+                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">
+                  Change Product Image
+                </label>
+                {editForm.image_url && (
+                  <div className="flex items-center space-x-3 mb-2 p-2 bg-stone-900 rounded-xl border border-stone-800">
+                    <img
+                      src={editForm.image_url}
+                      alt="Current"
+                      className="w-10 h-10 object-contain rounded bg-black/40 p-1"
+                    />
+                    <span className="text-[10px] text-stone-400 truncate">Current Image Active</span>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setEditImageFile(e.target.files[0]);
+                    }
+                  }}
+                  className="w-full text-[11px] text-stone-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-mono file:bg-amber-500 file:text-stone-950 file:cursor-pointer"
+                />
+                <span className="text-[9px] text-stone-500 mt-1 block">Leave empty to keep existing image.</span>
+              </div>
+
+              <div className="flex space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="w-1/3 py-3 rounded-xl uppercase tracking-widest font-bold bg-stone-800 text-stone-300 hover:bg-stone-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingEdit}
+                  className={`w-2/3 py-3 rounded-xl uppercase tracking-widest font-bold bg-amber-500 text-stone-950 hover:bg-amber-400 transition-colors ${
+                    submittingEdit ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  {submittingEdit ? 'Saving Changes...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -717,7 +924,7 @@ export default function AdminDashboard() {
               <div className="col-span-2">Category</div>
               <div className="col-span-2">Price</div>
               <div className="col-span-2">Stock Control</div>
-              <div className="col-span-2 text-right">Visibility</div>
+              <div className="col-span-2 text-right">Actions</div>
             </div>
 
             <div className="divide-y divide-stone-800/60">
@@ -728,31 +935,24 @@ export default function AdminDashboard() {
                       <img
                         src={prod.image_url}
                         alt={prod.name}
-                        className="w-10 h-10 object-contain rounded-lg bg-stone-800/80 p-1 border border-stone-700/60"
+                        className="w-10 h-10 object-contain rounded-lg bg-stone-800/80 p-1 border border-stone-700/60 shrink-0"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-lg bg-stone-800 flex items-center justify-center text-stone-600">
+                      <div className="w-10 h-10 rounded-lg bg-stone-800 flex items-center justify-center text-stone-600 shrink-0">
                         📦
                       </div>
                     )}
-                    <div>
-                      <span className="font-semibold text-white block">{prod.name}</span>
+                    <div className="truncate">
+                      <span className="font-semibold text-white block truncate">{prod.name}</span>
                       <span className="text-[10px] text-stone-500">ID: #{prod.id}</span>
                     </div>
                   </div>
 
                   <div className="col-span-2 text-stone-400">{prod.category}</div>
 
-                  <div className="col-span-2 flex items-center space-x-2">
+                  <div className="col-span-2">
                     <span className="text-stone-300 font-bold">${Number(prod.price).toFixed(2)}</span>
-                    <button
-                      onClick={() => handlePriceUpdate(prod.id, Number(prod.price))}
-                      className="text-[10px] px-1.5 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white"
-                      title="Edit Price"
-                    >
-                      ✎
-                    </button>
                   </div>
 
                   <div className="col-span-2 flex items-center space-x-2">
@@ -773,7 +973,16 @@ export default function AdminDashboard() {
                     </button>
                   </div>
 
-                  <div className="col-span-2 text-right">
+                  {/* Edit button & Visibility button */}
+                  <div className="col-span-2 flex items-center justify-end space-x-2">
+                    <button
+                      onClick={() => handleOpenEditProduct(prod)}
+                      className="text-[10px] px-2.5 py-1 rounded-md uppercase font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors"
+                      title="Edit Product Details & Image"
+                    >
+                      ✏️ Edit
+                    </button>
+
                     <button
                       onClick={() => handleToggleAvailability(prod.id, prod.is_available)}
                       className={`text-[10px] px-2.5 py-1 rounded-md uppercase font-bold transition-colors ${
