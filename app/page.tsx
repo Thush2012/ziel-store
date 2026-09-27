@@ -545,10 +545,13 @@ export default function Home() {
   const shippingFee = subtotal > 0 ? 5.0 : 0.0;
   const grandTotal = subtotal + shippingFee;
 
-  // Resilient Order Placement with Bank Slip Upload
+// Bulletproof Order Placement & Bank Slip Upload
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (cart.length === 0) return;
+    if (cart.length === 0) {
+      showNotification('Your bag is empty.');
+      return;
+    }
 
     if (shippingForm.paymentMethod === 'bank' && !slipFile) {
       showNotification('Please upload your bank deposit slip.');
@@ -561,12 +564,12 @@ export default function Home() {
     let uploadedSlipUrl: string | null = null;
 
     try {
-      // 1. Upload receipt if Bank Transfer
+      // 1. Upload receipt slip if Bank Transfer
       if (shippingForm.paymentMethod === 'bank' && slipFile) {
-        const fileExt = slipFile.name.split('.').pop() || 'png';
-        const cleanFileName = `${orderNum}-${Date.now()}.${fileExt}`.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const fileExt = slipFile.name.split('.').pop()?.toLowerCase() || 'png';
+        const cleanFileName = `slip_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
 
-        const { error: uploadError } = await supabase.storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
           .from('receipts')
           .upload(cleanFileName, slipFile, {
             cacheControl: '3600',
@@ -574,59 +577,67 @@ export default function Home() {
           });
 
         if (uploadError) {
-          console.error('Receipt upload error:', uploadError);
-          showNotification(`Receipt upload notice: ${uploadError.message}`);
-        } else {
-          const { data: publicUrlData } = supabase.storage
+          console.error('Storage Upload Error:', uploadError);
+          // If storage fails, alert the user but continue with order creation
+          showNotification(`Slip upload failed: ${uploadError.message}`);
+        } else if (uploadData) {
+          const { data: urlData } = supabase.storage
             .from('receipts')
             .getPublicUrl(cleanFileName);
-          uploadedSlipUrl = publicUrlData?.publicUrl || null;
+          uploadedSlipUrl = urlData?.publicUrl || null;
         }
       }
 
-      // 2. Insert order record into Supabase
+      // 2. Insert order record
+      const orderPayload = {
+        order_number: orderNum,
+        user_id: user?.id || null,
+        total_amount: grandTotal,
+        shipping_fee: shippingFee,
+        payment_method: shippingForm.paymentMethod,
+        shipping_address: shippingForm.address,
+        city: shippingForm.city,
+        phone: shippingForm.phone,
+        receipt_url: uploadedSlipUrl,
+        status: 'Pending',
+      };
+
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
-        .insert([
-          {
-            order_number: orderNum,
-            user_id: user ? user.id : null,
-            total_amount: grandTotal,
-            shipping_fee: shippingFee,
-            payment_method: shippingForm.paymentMethod,
-            shipping_address: shippingForm.address,
-            city: shippingForm.city,
-            phone: shippingForm.phone,
-            receipt_url: uploadedSlipUrl,
-            status: 'Pending',
-          },
-        ])
-        .select('id, order_number, total_amount')
+        .insert([orderPayload])
+        .select()
         .single();
 
       if (orderError) {
-        console.error('Order saving error:', orderError);
-        showNotification(`Order Error: ${orderError.message}`);
+        console.error('Supabase Order Insert Error:', orderError);
+        alert(`Order placement failed: ${orderError.message}`);
         setSubmittingOrder(false);
         return;
       }
 
-      // 3. Insert individual items
+      // 3. Try to insert order_items (if foreign key fails, don't crash the order)
       if (orderData?.id) {
-        const orderItemsPayload = cart.map((item) => ({
-          order_id: orderData.id,
-          product_id: item.id,
-          quantity: item.qty,
-          unit_price: item.price,
-        }));
+        try {
+          const orderItemsPayload = cart.map((item) => ({
+            order_id: orderData.id,
+            product_id: item.id,
+            quantity: item.qty,
+            unit_price: item.price,
+          }));
 
-        const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
-        if (itemsError) {
-          console.error('Line items saving warning:', itemsError);
+          const { error: itemsError } = await supabase
+            .from('order_items')
+            .insert(orderItemsPayload);
+
+          if (itemsError) {
+            console.warn('Order items insert note:', itemsError.message);
+          }
+        } catch (itemErr) {
+          console.warn('Order items bypass:', itemErr);
         }
       }
 
-      // 4. Update state to show the order receipt
+      // 4. Set receipt and transition to success view
       const newReceipt: OrderReceipt = {
         orderId: orderNum,
         items: [...cart],
@@ -651,12 +662,13 @@ export default function Home() {
       setSlipFile(null);
       setCheckoutStep('success');
     } catch (err: any) {
-      console.error('Order submission failed:', err);
-      showNotification(`Submission failed: ${err?.message || 'Check database connection'}`);
+      console.error('Unexpected Order Error:', err);
+      alert(`Unexpected error: ${err?.message || 'Check network connection'}`);
     } finally {
       setSubmittingOrder(false);
     }
   };
+
 
   const bgMain = isDarkMode ? 'bg-[#141413] text-[#F0EFEA]' : 'bg-[#FAF9F5] text-[#1C1B1A]';
   const headerBg = isDarkMode ? 'bg-[#141413]/80 border-stone-800' : 'bg-[#FAF9F5]/80 border-stone-200/60';
