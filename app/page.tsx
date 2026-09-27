@@ -31,6 +31,7 @@ interface OrderReceipt {
   city: string;
   phone: string;
   paymentMethod: string;
+  receiptUrl?: string | null;
 }
 
 // Historic Order type definition
@@ -192,30 +193,19 @@ const FAQS = [
 ];
 
 export default function Home() {
-  // Theme state
   const [isDarkMode, setIsDarkMode] = useState(false);
-
-  // Dynamic Products State
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-
-  // Currency State
   const [currency, setCurrency] = useState<Currency>('USD');
-
-  // Search, Filter & Sort
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Works');
   const [sortBy, setSortBy] = useState<'default' | 'low-to-high' | 'high-to-low'>('default');
 
-  // Commerce states
   const [cart, setCart] = useState<{ id: number; name: string; price: number; qty: number }[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Modal states
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [modalQuantity, setModalQuantity] = useState<number>(1);
-
-  // FAQ Accordion State
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   // Supabase Auth States
@@ -227,7 +217,6 @@ export default function Home() {
   const [otpInput, setOtpInput] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
-  // Email format validator
   const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput);
 
   // Order History States
@@ -238,6 +227,7 @@ export default function Home() {
   // Checkout Flow States
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<'details' | 'success'>('details');
+  const [submittingOrder, setSubmittingOrder] = useState(false);
   const [shippingForm, setShippingForm] = useState({
     fullName: '',
     phone: '',
@@ -245,13 +235,12 @@ export default function Home() {
     city: 'Colombo',
     paymentMethod: 'cod',
   });
+  const [slipFile, setSlipFile] = useState<File | null>(null);
   const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
 
-  // Contact Form State
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
 
-  // Format price helper according to chosen currency
   const formatPrice = (amountInUsd: number) => {
     const { symbol, rate, decimals } = CURRENCIES[currency];
     const converted = amountInUsd * rate;
@@ -261,7 +250,6 @@ export default function Home() {
     })}`;
   };
 
-  // --- SUPABASE AUTH SESSION LISTENER ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -288,7 +276,6 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- FETCH PRODUCTS FROM SUPABASE ON MOUNT ---
   useEffect(() => {
     async function fetchSupabaseProducts() {
       try {
@@ -326,7 +313,6 @@ export default function Home() {
     fetchSupabaseProducts();
   }, []);
 
-  // Fetch Order History for Authenticated User
   const fetchUserOrders = async () => {
     if (!user) return;
     setOrdersLoading(true);
@@ -351,7 +337,6 @@ export default function Home() {
     }
   };
 
-  // LocalStorage persistence hooks
   useEffect(() => {
     const savedCart = localStorage.getItem('ziel_cart');
     if (savedCart) {
@@ -386,7 +371,6 @@ export default function Home() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Filter & Sort products
   const filteredProducts = products.filter((product) => {
     const matchesCategory = selectedCategory === 'All Works' || product.category === selectedCategory;
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -436,7 +420,6 @@ export default function Home() {
     setCart([]);
   };
 
-  // --- REAL SUPABASE AUTH HANDLER WITH OTP SUPPORT ---
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailInput) return;
@@ -461,12 +444,11 @@ export default function Home() {
         if (error) {
           showNotification(`Registration Error: ${error.message}`);
         } else {
-          // If Supabase sends OTP/confirmation email, prompt for OTP
           if (!data.session) {
             setAuthMode('verify-otp');
             showNotification('OTP code sent! Please check your email inbox.');
           } else {
-            showNotification('Account created successfully! You are logged in.');
+            showNotification('Account created successfully!');
             setIsAuthOpen(false);
             setPasswordInput('');
           }
@@ -492,7 +474,6 @@ export default function Home() {
     }
   };
 
-  // --- VERIFY OTP CODE ---
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!otpInput) return;
@@ -521,7 +502,6 @@ export default function Home() {
     }
   };
 
-  // --- RESEND OTP CODE ---
   const handleResendOtp = async () => {
     if (!emailInput) return;
     setAuthLoading(true);
@@ -555,21 +535,47 @@ export default function Home() {
     setContactSubmitted(true);
   };
 
-  // Calculations
   const totalCartItems = cart.reduce((acc, item) => acc + item.qty, 0);
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
   const shippingFee = subtotal > 0 ? 5.00 : 0.00;
   const grandTotal = subtotal + shippingFee;
 
-  // Save Order
+  // Place Order with optional Receipt Upload
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
 
+    if (shippingForm.paymentMethod === 'bank' && !slipFile) {
+      showNotification('Please upload your bank deposit slip.');
+      return;
+    }
+
+    setSubmittingOrder(true);
     const randomNum = Math.floor(10000 + Math.random() * 90000);
     const orderNum = `ZIEL-${randomNum}`;
+    let uploadedSlipUrl: string | null = null;
 
     try {
+      // 1. Upload receipt if Bank Transfer
+      if (shippingForm.paymentMethod === 'bank' && slipFile) {
+        const fileExt = slipFile.name.split('.').pop();
+        const fileName = `${orderNum}-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('receipts')
+          .upload(fileName, slipFile);
+
+        if (uploadError) {
+          console.error('Receipt upload error:', uploadError);
+          showNotification('Could not upload receipt image. Continuing order...');
+        } else {
+          const { data: publicUrlData } = supabase.storage
+            .from('receipts')
+            .getPublicUrl(fileName);
+          uploadedSlipUrl = publicUrlData.publicUrl;
+        }
+      }
+
+      // 2. Insert order
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert([
@@ -582,6 +588,7 @@ export default function Home() {
             shipping_address: shippingForm.address,
             city: shippingForm.city,
             phone: shippingForm.phone,
+            receipt_url: uploadedSlipUrl,
           },
         ])
         .select()
@@ -590,9 +597,11 @@ export default function Home() {
       if (orderError) {
         console.error('Order saving error:', orderError);
         showNotification(`Order Error: ${orderError.message}`);
+        setSubmittingOrder(false);
         return;
       }
 
+      // 3. Insert items
       if (orderData) {
         const orderItemsPayload = cart.map((item) => ({
           order_id: orderData.id,
@@ -601,34 +610,35 @@ export default function Home() {
           unit_price: item.price,
         }));
 
-        const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
-        if (itemsError) {
-          console.error('Line items saving error:', itemsError);
-        }
+        await supabase.from('order_items').insert(orderItemsPayload);
       }
+
+      const newReceipt: OrderReceipt = {
+        orderId: orderNum,
+        items: [...cart],
+        subtotal,
+        shippingFee,
+        total: grandTotal,
+        customerName: shippingForm.fullName || user?.name || 'Valued Customer',
+        address: shippingForm.address,
+        city: shippingForm.city,
+        phone: shippingForm.phone,
+        receiptUrl: uploadedSlipUrl,
+        paymentMethod: 
+          shippingForm.paymentMethod === 'cod' ? 'Cash on Delivery' :
+          shippingForm.paymentMethod === 'card' ? 'Credit/Debit Card' : 'Direct Bank Transfer',
+      };
+
+      setReceipt(newReceipt);
+      setCart([]);
+      setSlipFile(null);
+      setIsCartOpen(false);
+      setCheckoutStep('success');
     } catch (err) {
       console.error('Order submission failed:', err);
+    } finally {
+      setSubmittingOrder(false);
     }
-
-    const newReceipt: OrderReceipt = {
-      orderId: orderNum,
-      items: [...cart],
-      subtotal,
-      shippingFee,
-      total: grandTotal,
-      customerName: shippingForm.fullName || user?.name || 'Valued Customer',
-      address: shippingForm.address,
-      city: shippingForm.city,
-      phone: shippingForm.phone,
-      paymentMethod: 
-        shippingForm.paymentMethod === 'cod' ? 'Cash on Delivery' :
-        shippingForm.paymentMethod === 'card' ? 'Credit/Debit Card' : 'Direct Bank Transfer',
-    };
-
-    setReceipt(newReceipt);
-    setCart([]);
-    setIsCartOpen(false);
-    setCheckoutStep('success');
   };
 
   const bgMain = isDarkMode ? 'bg-[#141413] text-[#F0EFEA]' : 'bg-[#FAF9F5] text-[#1C1B1A]';
@@ -658,8 +668,6 @@ export default function Home() {
 
       {/* Header */}
       <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3 flex items-center justify-between gap-2`}>
-        
-        {/* Left: Logo */}
         <div className="flex items-center space-x-2 shrink-0">
           <img 
             src="/logo.png" 
@@ -672,7 +680,6 @@ export default function Home() {
           </span>
         </div>
 
-        {/* Center Nav */}
         <nav className={`hidden md:flex items-center space-x-10 text-xs font-medium uppercase tracking-widest ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
           <a href="#works" className="hover:text-current transition-colors">Catalog</a>
           <a href="#about" className="hover:text-current transition-colors">Craftsmanship</a>
@@ -680,9 +687,7 @@ export default function Home() {
           <a href="#contact" className="hover:text-current transition-colors">Contact</a>
         </nav>
 
-        {/* Right Actions */}
         <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
-          
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             title="Toggle Theme"
@@ -757,7 +762,6 @@ export default function Home() {
         <div className={`flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b pb-6 ${
           isDarkMode ? 'border-stone-800' : 'border-stone-200/80'
         }`}>
-          {/* Categories */}
           <div className="flex flex-wrap items-center gap-2">
             {CATEGORIES.map((cat) => (
               <button
@@ -772,9 +776,7 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Search, Currency & Sort Group */}
           <div className="flex flex-col sm:flex-row items-center gap-3">
-            {/* Search Input */}
             <div className="relative w-full sm:w-60">
               <input
                 type="text"
@@ -797,7 +799,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* Currency Selector */}
             <div className="relative w-full sm:w-auto">
               <select
                 value={currency}
@@ -816,7 +817,6 @@ export default function Home() {
               </select>
             </div>
 
-            {/* Price Sort Dropdown */}
             <select
               value={sortBy}
               onChange={(e: any) => setSortBy(e.target.value)}
@@ -1199,10 +1199,7 @@ export default function Home() {
       {/* Shopping Bag Drawer */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end">
-          <div 
-            className="fixed inset-0" 
-            onClick={() => setIsCartOpen(false)} 
-          />
+          <div className="fixed inset-0" onClick={() => setIsCartOpen(false)} />
           <div className={`relative z-10 w-full max-w-md h-full shadow-2xl flex flex-col justify-between ${modalBg}`}>
             <div className={`p-6 border-b flex items-center justify-between ${isDarkMode ? 'border-stone-800' : 'border-stone-200'}`}>
               <div className="flex items-center space-x-2">
@@ -1369,7 +1366,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Supabase Auth Modal (Sign In, Sign Up, Verify OTP) */}
+      {/* Supabase Auth Modal */}
       {isAuthOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1389,7 +1386,6 @@ export default function Home() {
             </div>
 
             {authMode === 'verify-otp' ? (
-              /* OTP VERIFICATION VIEW */
               <form onSubmit={handleVerifyOtp} className="space-y-4">
                 <p className="text-xs text-stone-400 leading-relaxed">
                   Enter the 6-digit confirmation code dispatched to <span className="font-semibold text-current">{emailInput}</span>.
@@ -1441,14 +1437,12 @@ export default function Home() {
                 </div>
               </form>
             ) : (
-              /* SIGN IN / SIGN UP VIEW */
               <form onSubmit={handleAuthSubmit} className="space-y-4">
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold">
                       Email Address
                     </label>
-                    {/* Live format validation tick indicator */}
                     {isEmailValid && (
                       <span className="text-[10px] font-mono text-emerald-500 font-medium flex items-center space-x-1">
                         <span>✓</span>
@@ -1618,10 +1612,43 @@ export default function Home() {
                       }`}
                     >
                       <option value="cod">Cash on Delivery (COD)</option>
-                      <option value="card">Credit / Debit Card</option>
                       <option value="bank">Direct Bank Transfer</option>
+                      <option value="card">Credit / Debit Card</option>
                     </select>
                   </div>
+
+                  {/* Bank Transfer Details & Slip Upload Block */}
+                  {shippingForm.paymentMethod === 'bank' && (
+                    <div className={`p-4 rounded-2xl border text-xs font-mono space-y-3 ${
+                      isDarkMode ? 'bg-amber-950/20 border-amber-800/40 text-stone-300' : 'bg-amber-50/70 border-amber-200 text-stone-800'
+                    }`}>
+                      <div className="font-bold text-amber-500 uppercase tracking-wider text-[11px]">
+                        Bank Account Information
+                      </div>
+                      <div className="space-y-1 text-[11px] text-stone-400">
+                        <div><strong className="text-current">Bank:</strong> Commercial Bank of Ceylon</div>
+                        <div><strong className="text-current">Branch:</strong> Katunayake Branch</div>
+                        <div><strong className="text-current">Account Name:</strong> ZIEL STORE PVT LTD</div>
+                        <div><strong className="text-current">Account Number:</strong> 8009234821</div>
+                      </div>
+                      <div className="pt-2 border-t border-amber-500/20">
+                        <label className="block text-[10px] uppercase font-bold tracking-wider mb-1.5 text-current">
+                          Upload Deposit Slip / Transfer Screenshot *
+                        </label>
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          required
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              setSlipFile(e.target.files[0]);
+                            }
+                          }}
+                          className="w-full text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-mono file:bg-amber-500 file:text-stone-950 file:cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   <div className={`p-4 rounded-xl text-xs font-mono space-y-1.5 my-4 ${
                     isDarkMode ? 'bg-stone-900/60 border border-stone-800' : 'bg-stone-100/80 border border-stone-200'
@@ -1642,11 +1669,12 @@ export default function Home() {
 
                   <button
                     type="submit"
+                    disabled={submittingOrder}
                     className={`w-full py-4 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
                       isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-stone-900 text-[#FAF9F5] hover:bg-stone-800'
-                    }`}
+                    } ${submittingOrder ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    Confirm Order ({formatPrice(grandTotal)})
+                    {submittingOrder ? 'Processing & Uploading...' : `Confirm Order (${formatPrice(grandTotal)})`}
                   </button>
                 </form>
               </>
@@ -1668,6 +1696,11 @@ export default function Home() {
                     <div>Address: {receipt.address}, {receipt.city}</div>
                     <div>Phone: {receipt.phone}</div>
                     <div>Payment: {receipt.paymentMethod}</div>
+                    {receipt.receiptUrl && (
+                      <div className="text-emerald-400">
+                        Deposit Slip: Attached ✓
+                      </div>
+                    )}
                     <div className="border-t pt-2 mt-2 space-y-1">
                       {receipt.items.map((it) => (
                         <div key={it.id} className="flex justify-between text-stone-400">

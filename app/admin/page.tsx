@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
 
-// Authorized administrator email
 const AUTHORIZED_ADMIN_EMAIL = 'thushanmanusha345@gmail.com';
 
 interface OrderItem {
@@ -25,6 +24,7 @@ interface AdminOrder {
   shipping_address: string;
   city: string;
   phone: string;
+  receipt_url?: string | null;
   order_items?: OrderItem[];
 }
 
@@ -38,29 +38,26 @@ interface AdminProduct {
 }
 
 export default function AdminDashboard() {
-  // Auth state
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
-  // Secret Email Passphrase State
   const [inputEmail, setInputEmail] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
-  // Tab & Data states
   const [activeTab, setActiveTab] = useState<'orders' | 'inventory'>('orders');
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [previewSlipUrl, setPreviewSlipUrl] = useState<string | null>(null);
 
   const showNotice = (msg: string) => {
     setActionMessage(msg);
     setTimeout(() => setActionMessage(null), 3000);
   };
 
-  // 1. Session verification guard & LocalStorage check
   useEffect(() => {
     const savedAdmin = localStorage.getItem('ziel_admin_authorized');
     if (savedAdmin === 'true') {
@@ -85,7 +82,6 @@ export default function AdminDashboard() {
     checkCurrentSession();
   }, []);
 
-  // 2. Secret Email Verification Handler
   const handleSecretAuth = (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -106,7 +102,6 @@ export default function AdminDashboard() {
     setAuthLoading(false);
   };
 
-  // 3. Admin Logout Handler
   const handleAdminLogout = async () => {
     localStorage.removeItem('ziel_admin_authorized');
     await supabase.auth.signOut();
@@ -116,7 +111,6 @@ export default function AdminDashboard() {
     showNotice('Logged out of admin portal');
   };
 
-  // 4. Fetch dashboard data when authenticated
   const loadDashboardData = async () => {
     setLoading(true);
     try {
@@ -158,7 +152,6 @@ export default function AdminDashboard() {
     }
   }, [isAuthorized]);
 
-  // 5. Update Order Status
   const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
     const { error } = await supabase
       .from('orders')
@@ -175,7 +168,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // 6. Update Stock Quantity
   const handleStockAdjust = async (productId: number, newQty: number) => {
     if (newQty < 0) return;
     const { error } = await supabase
@@ -193,7 +185,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // 7. Toggle Item Visibility
   const handleToggleAvailability = async (productId: number, currentStatus: boolean) => {
     const { error } = await supabase
       .from('products')
@@ -210,7 +201,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Initial loading indicator
   if (isAuthorized === null) {
     return (
       <main className="min-h-screen bg-[#121212] flex items-center justify-center font-mono text-xs text-stone-400">
@@ -219,7 +209,6 @@ export default function AdminDashboard() {
     );
   }
 
-  // Secret Single-Field Verification Card
   if (!isAuthorized) {
     return (
       <main className="min-h-screen bg-[#121212] flex flex-col items-center justify-center p-6 text-[#F3F2EE] font-mono">
@@ -284,10 +273,39 @@ export default function AdminDashboard() {
 
   return (
     <main className="min-h-screen bg-[#121212] text-[#F3F2EE] font-sans antialiased p-6 sm:p-12">
-      {/* Toast Notice */}
       {actionMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-stone-100 text-stone-950 px-4 py-3 rounded-2xl shadow-xl text-xs font-mono font-medium">
           {actionMessage}
+        </div>
+      )}
+
+      {/* Slip Preview Modal */}
+      {previewSlipUrl && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setPreviewSlipUrl(null)}
+        >
+          <div 
+            className="max-w-2xl w-full bg-[#1A1918] border border-stone-800 p-6 rounded-3xl overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-mono uppercase tracking-wider text-white">Bank Transfer Slip</h3>
+              <button 
+                onClick={() => setPreviewSlipUrl(null)}
+                className="text-stone-400 hover:text-white text-sm"
+              >
+                ✕ Close
+              </button>
+            </div>
+            <div className="max-h-[70vh] overflow-auto flex items-center justify-center bg-black/40 rounded-xl p-2">
+              <img 
+                src={previewSlipUrl} 
+                alt="Deposit Slip" 
+                className="max-h-[65vh] w-auto object-contain rounded-lg"
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -353,8 +371,6 @@ export default function AdminDashboard() {
         {loading ? (
           <div className="py-20 text-center font-mono text-xs text-stone-500">Loading store records...</div>
         ) : activeTab === 'orders' ? (
-          
-          /* ORDERS TAB */
           <div className="space-y-6">
             <div className="flex flex-wrap items-center gap-2 pb-2">
               <span className="text-xs font-mono text-stone-500 mr-2">Filter Status:</span>
@@ -400,6 +416,15 @@ export default function AdminDashboard() {
                         }`}>
                           {ord.status || 'Pending'}
                         </span>
+
+                        {ord.receipt_url && (
+                          <button
+                            onClick={() => setPreviewSlipUrl(ord.receipt_url || null)}
+                            className="text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors"
+                          >
+                            📷 View Slip
+                          </button>
+                        )}
                       </div>
 
                       <div className="text-stone-400 grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] pt-1">
@@ -449,8 +474,6 @@ export default function AdminDashboard() {
             )}
           </div>
         ) : (
-          
-          /* INVENTORY TAB */
           <div className="bg-stone-900/60 rounded-2xl border border-stone-800 overflow-hidden font-mono text-xs">
             <div className="grid grid-cols-12 bg-stone-900 p-4 font-bold border-b border-stone-800 text-stone-400 uppercase text-[10px] tracking-wider">
               <div className="col-span-5">Product</div>
@@ -470,7 +493,6 @@ export default function AdminDashboard() {
                   <div className="col-span-2 text-stone-400">{prod.category}</div>
                   <div className="col-span-2 text-stone-300 font-bold">${Number(prod.price).toFixed(2)}</div>
                   
-                  {/* Stock adjuster */}
                   <div className="col-span-2 flex items-center space-x-2">
                     <button
                       onClick={() => handleStockAdjust(prod.id, (prod.stock_qty || 0) - 1)}
@@ -489,7 +511,6 @@ export default function AdminDashboard() {
                     </button>
                   </div>
 
-                  {/* Availability toggle */}
                   <div className="col-span-1 text-right">
                     <button
                       onClick={() => handleToggleAvailability(prod.id, prod.is_available)}
