@@ -1,14 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
 
-// Add all authorized admin emails here
-const ADMIN_EMAILS = [
-  'your-admin-email@gmail.com', // <-- REPLACE WITH YOUR ADMIN EMAIL
-];
+// Strict authorized admin email
+const AUTHORIZED_ADMIN_EMAIL = 'thushanmanusha345@gmail.com';
 
 interface OrderItem {
   id: number;
@@ -41,11 +38,15 @@ interface AdminProduct {
 }
 
 export default function AdminDashboard() {
-  const router = useRouter();
-
-  // Auth & Guard states
+  // Auth state
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+
+  // Dedicated Admin Login Form State
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
 
   // Tab & Data states
   const [activeTab, setActiveTab] = useState<'orders' | 'inventory'>('orders');
@@ -62,34 +63,82 @@ export default function AdminDashboard() {
 
   // 1. Session verification guard
   useEffect(() => {
-    async function verifyAdminAccess() {
+    async function checkCurrentSession() {
       const { data: { session } } = await supabase.auth.getSession();
       const email = session?.user?.email;
 
-      if (!session || !email || !ADMIN_EMAILS.includes(email.toLowerCase())) {
-        setIsAuthorized(false);
-      } else {
+      if (session && email && email.toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
         setCurrentUserEmail(email);
         setIsAuthorized(true);
+      } else {
+        setIsAuthorized(false);
       }
     }
 
-    verifyAdminAccess();
+    checkCurrentSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const email = session?.user?.email;
-      if (!session || !email || !ADMIN_EMAILS.includes(email.toLowerCase())) {
-        setIsAuthorized(false);
-      } else {
+      if (session && email && email.toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
         setCurrentUserEmail(email);
         setIsAuthorized(true);
+      } else {
+        setIsAuthorized(false);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [router]);
+  }, []);
 
-  // 2. Fetch data only when confirmed admin
+  // 2. Direct Admin Login Handler
+  const handleAdminLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+
+    // Instant client-side check
+    if (loginEmail.trim().toLowerCase() !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+      setAuthError(`Access Denied: ${loginEmail} is not authorized as an admin.`);
+      return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginEmail.trim(),
+        password: loginPassword,
+      });
+
+      if (error) {
+        setAuthError(error.message);
+      } else if (data.session) {
+        if (data.session.user.email?.toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+          setCurrentUserEmail(data.session.user.email);
+          setIsAuthorized(true);
+          showNotice('Admin login successful!');
+        } else {
+          await supabase.auth.signOut();
+          setAuthError('Unauthorized account.');
+          setIsAuthorized(false);
+        }
+      }
+    } catch (err: any) {
+      setAuthError(err.message || 'Login failed');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // 3. Admin Logout Handler
+  const handleAdminLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAuthorized(false);
+    setCurrentUserEmail(null);
+    setLoginPassword('');
+    showNotice('Logged out of admin portal');
+  };
+
+  // 4. Fetch dashboard data when authenticated
   const loadDashboardData = async () => {
     setLoading(true);
     try {
@@ -131,7 +180,7 @@ export default function AdminDashboard() {
     }
   }, [isAuthorized]);
 
-  // 3. Update Order Status
+  // 5. Update Order Status
   const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
     const { error } = await supabase
       .from('orders')
@@ -148,7 +197,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // 4. Update Stock Quantity
+  // 6. Update Stock Quantity
   const handleStockAdjust = async (productId: number, newQty: number) => {
     if (newQty < 0) return;
     const { error } = await supabase
@@ -166,7 +215,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // 5. Toggle Item Visibility
+  // 7. Toggle Item Visibility
   const handleToggleAvailability = async (productId: number, currentStatus: boolean) => {
     const { error } = await supabase
       .from('products')
@@ -183,7 +232,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Loading state while checking authentication
+  // Initial check loading indicator
   if (isAuthorized === null) {
     return (
       <main className="min-h-screen bg-[#121212] flex items-center justify-center font-mono text-xs text-stone-400">
@@ -192,23 +241,74 @@ export default function AdminDashboard() {
     );
   }
 
-  // Access Denied Screen
-  if (isAuthorized === false) {
+  // Direct Admin Login Card Screen
+  if (!isAuthorized) {
     return (
-      <main className="min-h-screen bg-[#121212] flex flex-col items-center justify-center p-6 text-center text-[#F3F2EE] font-mono">
-        <div className="w-12 h-12 rounded-full bg-rose-950 border border-rose-800 text-rose-400 flex items-center justify-center text-xl mb-4">
-          🔒
+      <main className="min-h-screen bg-[#121212] flex flex-col items-center justify-center p-6 text-[#F3F2EE] font-mono">
+        <div className="w-full max-w-sm p-8 rounded-3xl bg-[#1A1918] border border-stone-800 shadow-2xl">
+          <div className="text-center mb-6">
+            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center text-xl mx-auto mb-3">
+              🛡️
+            </div>
+            <h1 className="text-base font-bold uppercase tracking-wider text-white">Admin Portal Login</h1>
+            <p className="text-[11px] text-stone-400 mt-1">Authorized store management only</p>
+          </div>
+
+          {authError && (
+            <div className="mb-4 p-3 rounded-xl bg-rose-950/70 border border-rose-800 text-rose-300 text-[11px] leading-relaxed">
+              {authError}
+            </div>
+          )}
+
+          <form onSubmit={handleAdminLogin} className="space-y-4">
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
+                Admin Email
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="thushanmanusha345@gmail.com"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-stone-700 bg-stone-900 text-white text-xs focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                required
+                placeholder="••••••••"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-stone-700 bg-stone-900 text-white text-xs focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={authLoading}
+              className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-bold bg-amber-500 text-stone-950 hover:bg-amber-400 transition-colors ${
+                authLoading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
+              {authLoading ? 'Authenticating...' : 'Access Dashboard'}
+            </button>
+          </form>
+
+          <div className="mt-6 pt-4 border-t border-stone-800 text-center">
+            <Link
+              href="/"
+              className="text-[11px] uppercase tracking-wider text-stone-400 hover:text-white transition-colors"
+            >
+              ← Back to Storefront
+            </Link>
+          </div>
         </div>
-        <h1 className="text-lg font-bold uppercase tracking-wider mb-2">Access Restricted</h1>
-        <p className="text-xs text-stone-400 max-w-sm mb-6 leading-relaxed">
-          The requested portal is restricted to authorized store administrators. Please sign in with an admin account on the storefront.
-        </p>
-        <Link
-          href="/"
-          className="px-5 py-2.5 rounded-xl bg-stone-100 text-stone-900 font-bold text-xs uppercase hover:bg-white transition-colors"
-        >
-          Return to Storefront
-        </Link>
       </main>
     );
   }
@@ -221,7 +321,7 @@ export default function AdminDashboard() {
     <main className="min-h-screen bg-[#121212] text-[#F3F2EE] font-sans antialiased p-6 sm:p-12">
       {/* Toast Notice */}
       {actionMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-stone-100 text-stone-950 px-4 py-3 rounded-2xl shadow-xl text-xs font-mono font-medium animate-fade-in">
+        <div className="fixed bottom-6 right-6 z-50 bg-stone-100 text-stone-950 px-4 py-3 rounded-2xl shadow-xl text-xs font-mono font-medium">
           {actionMessage}
         </div>
       )}
@@ -232,10 +332,10 @@ export default function AdminDashboard() {
           <div className="flex items-center space-x-3">
             <span className="text-xl font-bold tracking-wider font-mono">ZIEL STORE</span>
             <span className="text-[10px] uppercase font-mono tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              Authenticated Admin
+              Authorized Admin
             </span>
           </div>
-          <p className="text-xs text-stone-400 mt-1">Logged in as: {currentUserEmail}</p>
+          <p className="text-xs text-stone-400 mt-1 font-mono">Operator: {currentUserEmail}</p>
         </div>
 
         <div className="flex items-center space-x-4">
@@ -243,13 +343,19 @@ export default function AdminDashboard() {
             href="/"
             className="text-xs uppercase tracking-wider font-mono text-stone-400 hover:text-white transition-colors"
           >
-            ← View Storefront
+            ← Storefront
           </Link>
           <button
             onClick={loadDashboardData}
             className="px-4 py-2 rounded-xl text-xs font-mono uppercase bg-stone-800 hover:bg-stone-700 transition-colors"
           >
-            Refresh Data
+            Refresh
+          </button>
+          <button
+            onClick={handleAdminLogout}
+            className="px-4 py-2 rounded-xl text-xs font-mono uppercase bg-rose-950/80 border border-rose-800 text-rose-300 hover:bg-rose-900 transition-colors"
+          >
+            Logout
           </button>
         </div>
       </div>
