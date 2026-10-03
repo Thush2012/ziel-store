@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 
 interface Product {
@@ -751,6 +752,7 @@ export default function Home() {
         <nav className={`hidden md:flex items-center space-x-10 text-xs font-medium uppercase tracking-widest ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
           <a href="#works" className="hover:text-current transition-colors">Catalog</a>
           <a href="#about" className="hover:text-current transition-colors">Craftsmanship</a>
+          <Link href="/verify" className="hover:text-amber-500 transition-colors">Verify Batch</Link>
           <a href="#faq" className="hover:text-current transition-colors">FAQ</a>
           <a href="#contact" className="hover:text-current transition-colors">Contact</a>
         </nav>
