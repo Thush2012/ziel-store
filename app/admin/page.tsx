@@ -27,6 +27,7 @@ interface AdminOrder {
   customer_email?: string | null;
   customer_name?: string | null;
   receipt_url?: string | null;
+  coupon_code?: string | null;
   order_items?: OrderItem[];
 }
 
@@ -53,6 +54,19 @@ interface BatchRecord {
   bottling_date: string;
 }
 
+interface AdminCoupon {
+  id: number;
+  code: string;
+  discount_type: 'percentage' | 'flat' | 'free_shipping';
+  discount_value: number;
+  min_spend: number;
+  max_uses: number | null;
+  times_used: number;
+  is_active: boolean;
+  expires_at: string | null;
+  created_at: string;
+}
+
 export default function AdminDashboard() {
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
@@ -61,15 +75,17 @@ export default function AdminDashboard() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'inventory' | 'analytics'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'inventory' | 'analytics' | 'vouchers'>('orders');
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [batches, setBatches] = useState<BatchRecord[]>([]);
+  const [coupons, setCoupons] = useState<AdminCoupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [actionMessage, showNotificationMessage] = useState<string | null>(null);
   const [previewSlipUrl, setPreviewSlipUrl] = useState<string | null>(null);
 
+  // Product modals
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [submittingProduct, setSubmittingProduct] = useState(false);
   const [newProductForm, setNewProductForm] = useState({
@@ -94,6 +110,17 @@ export default function AdminDashboard() {
   });
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [submittingEdit, setSubmittingEdit] = useState(false);
+
+  // Voucher modal
+  const [isAddCouponOpen, setIsAddCouponOpen] = useState(false);
+  const [submittingCoupon, setSubmittingCoupon] = useState(false);
+  const [newCouponForm, setNewCouponForm] = useState({
+    code: '',
+    discount_type: 'percentage',
+    discount_value: '',
+    min_spend: '0',
+    max_uses: '',
+  });
 
   const showNotice = (msg: string) => {
     showNotificationMessage(msg);
@@ -190,6 +217,15 @@ export default function AdminDashboard() {
       if (batchData) {
         setBatches(batchData as BatchRecord[]);
       }
+
+      const { data: couponData, error: couponErr } = await supabase
+        .from('coupons')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!couponErr && couponData) {
+        setCoupons(couponData as AdminCoupon[]);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -271,7 +307,6 @@ export default function AdminDashboard() {
       );
       showNotice(`Order marked as ${newStatus}`);
 
-      // Dispatch automated status update email to the customer
       if (targetOrder) {
         const recipientEmail = targetOrder.customer_email || (targetOrder.phone?.includes('@') ? targetOrder.phone : undefined);
 
@@ -483,6 +518,65 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleCreateCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingCoupon(true);
+
+    try {
+      const cleanCode = newCouponForm.code.trim().toUpperCase();
+
+      const payload = {
+        code: cleanCode,
+        discount_type: newCouponForm.discount_type,
+        discount_value: parseFloat(newCouponForm.discount_value) || 0,
+        min_spend: parseFloat(newCouponForm.min_spend) || 0,
+        max_uses: newCouponForm.max_uses ? parseInt(newCouponForm.max_uses, 10) : null,
+        is_active: true,
+      };
+
+      const { data, error } = await supabase
+        .from('coupons')
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) {
+        alert(`Failed to create voucher: ${error.message}`);
+      } else if (data) {
+        setCoupons((prev) => [data as AdminCoupon, ...prev]);
+        setIsAddCouponOpen(false);
+        setNewCouponForm({
+          code: '',
+          discount_type: 'percentage',
+          discount_value: '',
+          min_spend: '0',
+          max_uses: '',
+        });
+        showNotice(`Voucher "${cleanCode}" created successfully!`);
+      }
+    } catch (err: any) {
+      alert(`Error: ${err?.message || 'Failed to create coupon'}`);
+    } finally {
+      setSubmittingCoupon(false);
+    }
+  };
+
+  const handleToggleCoupon = async (couponId: number, currentStatus: boolean) => {
+    const { error } = await supabase
+      .from('coupons')
+      .update({ is_active: !currentStatus })
+      .eq('id', couponId);
+
+    if (error) {
+      showNotice(`Update failed: ${error.message}`);
+    } else {
+      setCoupons((prev) =>
+        prev.map((c) => (c.id === couponId ? { ...c, is_active: !currentStatus } : c))
+      );
+      showNotice(`Voucher status updated`);
+    }
+  };
+
   if (isAuthorized === null) {
     return (
       <main className="min-h-screen bg-[#121212] flex items-center justify-center font-mono text-xs text-stone-400">
@@ -549,7 +643,6 @@ export default function AdminDashboard() {
     );
   }
 
-  // Analytics Aggregates
   const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
   const totalPendingSlips = orders.filter((o) => o.receipt_url && o.status === 'Pending').length;
   const avgOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
@@ -838,6 +931,102 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Add Voucher Modal */}
+      {isAddCouponOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setIsAddCouponOpen(false)}
+        >
+          <div
+            className="max-w-md w-full bg-[#1A1918] border border-stone-800 p-6 sm:p-8 rounded-3xl shadow-2xl my-auto text-xs font-mono"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-white">Create Promotional Voucher</h3>
+              <button onClick={() => setIsAddCouponOpen(false)} className="text-stone-400 hover:text-white">✕</button>
+            </div>
+
+            <form onSubmit={handleCreateCoupon} className="space-y-4">
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Coupon Code *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. FESTIVE15"
+                  value={newCouponForm.code}
+                  onChange={(e) => setNewCouponForm({ ...newCouponForm, code: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white font-bold tracking-wider uppercase focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Discount Type</label>
+                  <select
+                    value={newCouponForm.discount_type}
+                    onChange={(e) => setNewCouponForm({ ...newCouponForm, discount_type: e.target.value as any })}
+                    className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="percentage">Percentage (%)</option>
+                    <option value="flat">Flat Amount ($)</option>
+                    <option value="free_shipping">Free Shipping</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">
+                    {newCouponForm.discount_type === 'percentage' ? 'Percentage Off (%)' : 'Discount ($)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required={newCouponForm.discount_type !== 'free_shipping'}
+                    disabled={newCouponForm.discount_type === 'free_shipping'}
+                    placeholder={newCouponForm.discount_type === 'percentage' ? '15' : '5.00'}
+                    value={newCouponForm.discount_type === 'free_shipping' ? '0' : newCouponForm.discount_value}
+                    onChange={(e) => setNewCouponForm({ ...newCouponForm, discount_value: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500 disabled:opacity-40"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Min Spend ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={newCouponForm.min_spend}
+                    onChange={(e) => setNewCouponForm({ ...newCouponForm, min_spend: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 mb-1">Max Redemptions</label>
+                  <input
+                    type="number"
+                    placeholder="Unlimited"
+                    value={newCouponForm.max_uses}
+                    onChange={(e) => setNewCouponForm({ ...newCouponForm, max_uses: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-stone-900 border border-stone-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submittingCoupon}
+                className={`w-full py-3.5 rounded-xl uppercase tracking-widest font-bold bg-amber-500 text-stone-950 hover:bg-amber-400 transition-colors mt-2 ${
+                  submittingCoupon ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                {submittingCoupon ? 'Creating Voucher...' : 'Publish Voucher'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center pb-8 border-b border-stone-800 gap-4">
         <div>
@@ -869,7 +1058,7 @@ export default function AdminDashboard() {
 
       {/* Tabs */}
       <div className="max-w-7xl mx-auto my-6 flex justify-between items-center">
-        <div className="flex space-x-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={() => setActiveTab('orders')}
             className={`px-5 py-2.5 rounded-xl text-xs uppercase font-mono tracking-wider transition-all ${
@@ -885,6 +1074,14 @@ export default function AdminDashboard() {
             }`}
           >
             Inventory ({products.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('vouchers')}
+            className={`px-5 py-2.5 rounded-xl text-xs uppercase font-mono tracking-wider transition-all ${
+              activeTab === 'vouchers' ? 'bg-stone-100 text-stone-900 font-bold' : 'bg-stone-900 text-stone-400 hover:bg-stone-800'
+            }`}
+          >
+            Vouchers ({coupons.length})
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
@@ -905,14 +1102,78 @@ export default function AdminDashboard() {
             <span>Add Product</span>
           </button>
         )}
+
+        {activeTab === 'vouchers' && (
+          <button
+            onClick={() => setIsAddCouponOpen(true)}
+            className="px-4 py-2.5 rounded-xl text-xs uppercase font-mono font-bold tracking-wider bg-amber-500 text-stone-950 hover:bg-amber-400 transition-colors shadow-md flex items-center space-x-1.5"
+          >
+            <span>+</span>
+            <span>Create Voucher</span>
+          </button>
+        )}
       </div>
 
       <div className="max-w-7xl mx-auto">
         {loading ? (
           <div className="py-20 text-center font-mono text-xs text-stone-500">Loading store records...</div>
+        ) : activeTab === 'vouchers' ? (
+          <div className="bg-stone-900/60 rounded-2xl border border-stone-800 overflow-hidden font-mono text-xs">
+            <div className="grid grid-cols-12 bg-stone-900 p-4 font-bold border-b border-stone-800 text-stone-400 uppercase text-[10px] tracking-wider">
+              <div className="col-span-3">Voucher Code</div>
+              <div className="col-span-2">Benefit</div>
+              <div className="col-span-2">Min Spend</div>
+              <div className="col-span-3">Redemptions / Cap</div>
+              <div className="col-span-2 text-right">Status</div>
+            </div>
+
+            {coupons.length === 0 ? (
+              <div className="p-12 text-center text-stone-500">No promotional coupons created yet.</div>
+            ) : (
+              <div className="divide-y divide-stone-800/60">
+                {coupons.map((coupon) => (
+                  <div key={coupon.id} className="grid grid-cols-12 p-4 items-center gap-2">
+                    <div className="col-span-3">
+                      <span className="font-bold text-amber-400 text-sm tracking-wider block">{coupon.code}</span>
+                      <span className="text-[10px] text-stone-500">Created {new Date(coupon.created_at).toLocaleDateString()}</span>
+                    </div>
+
+                    <div className="col-span-2 text-stone-200">
+                      {coupon.discount_type === 'percentage' && `${coupon.discount_value}% OFF`}
+                      {coupon.discount_type === 'flat' && `$${Number(coupon.discount_value).toFixed(2)} OFF`}
+                      {coupon.discount_type === 'free_shipping' && 'FREE SHIPPING'}
+                    </div>
+
+                    <div className="col-span-2 text-stone-400">
+                      {coupon.min_spend > 0 ? `$${Number(coupon.min_spend).toFixed(2)}` : 'None'}
+                    </div>
+
+                    <div className="col-span-3">
+                      <span className="text-white font-semibold">{coupon.times_used}</span>
+                      <span className="text-stone-500 text-[11px]">
+                        {coupon.max_uses !== null ? ` / ${coupon.max_uses} used` : ' uses (No limit)'}
+                      </span>
+                    </div>
+
+                    <div className="col-span-2 text-right">
+                      <button
+                        onClick={() => handleToggleCoupon(coupon.id, coupon.is_active)}
+                        className={`text-[10px] px-3 py-1 rounded-md uppercase font-bold transition-colors ${
+                          coupon.is_active
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800 hover:bg-rose-950 hover:text-rose-300 hover:border-rose-800'
+                            : 'bg-rose-950 text-rose-300 border border-rose-800 hover:bg-emerald-950 hover:text-emerald-300 hover:border-emerald-800'
+                        }`}
+                      >
+                        {coupon.is_active ? 'Active' : 'Disabled'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         ) : activeTab === 'analytics' ? (
           <div className="space-y-6 font-mono text-xs">
-            {/* Top KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="p-6 rounded-2xl bg-stone-900/60 border border-stone-800">
                 <span className="text-[10px] uppercase text-stone-500 block mb-1">Gross Revenue</span>
@@ -936,7 +1197,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Inventory Status & Batches Registered */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="p-6 rounded-2xl bg-stone-900/60 border border-stone-800 space-y-4">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-white">Stock Level Summary</h3>
@@ -1035,6 +1295,9 @@ export default function AdminDashboard() {
                         <div><strong className="text-stone-300">Payment:</strong> {ord.payment_method.toUpperCase()}</div>
                         <div><strong className="text-stone-300">Phone:</strong> {ord.phone}</div>
                         <div><strong className="text-stone-300">City / Country:</strong> {ord.city}</div>
+                        {ord.coupon_code && (
+                          <div><strong className="text-stone-300">Coupon:</strong> <span className="text-amber-400 font-bold">{ord.coupon_code}</span></div>
+                        )}
                         <div className="sm:col-span-2"><strong className="text-stone-300">Address & Zone:</strong> {ord.shipping_address}</div>
                       </div>
 
@@ -1137,7 +1400,7 @@ export default function AdminDashboard() {
                       className="text-[10px] px-2.5 py-1 rounded-md uppercase font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors"
                       title="Edit Product Details & Image"
                     >
-                      ✏️ Edit
+                      ✏️️ Edit
                     </button>
 
                     <button

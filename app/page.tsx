@@ -20,10 +20,17 @@ interface Product {
   specs: { label: string; value: string }[];
 }
 
+interface AppliedCoupon {
+  code: string;
+  discount_type: 'percentage' | 'flat' | 'free_shipping';
+  discount_value: number;
+}
+
 interface OrderReceipt {
   orderId: string;
   items: { id: number; name: string; price: number; qty: number }[];
   subtotal: number;
+  discountAmount: number;
   shippingFee: number;
   total: number;
   customerName: string;
@@ -34,6 +41,7 @@ interface OrderReceipt {
   paymentMethod: string;
   receiptUrl?: string | null;
   zoneName: string;
+  couponCode?: string | null;
 }
 
 interface PastOrder {
@@ -259,6 +267,11 @@ export default function Home() {
   const [slipFile, setSlipFile] = useState<File | null>(null);
   const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
 
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
 
@@ -365,7 +378,6 @@ export default function Home() {
     if (savedCurrency && CURRENCIES[savedCurrency]) {
       setCurrency(savedCurrency);
     } else {
-      // Auto-detect country, local currency, and shipping destination
       fetch('/api/geo')
         .then((res) => res.json())
         .then((data) => {
@@ -444,6 +456,41 @@ export default function Home() {
   };
 
   const clearCart = () => setCart([]);
+
+  const handleApplyCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!couponInput.trim()) return;
+    setCouponLoading(true);
+    setCouponError(null);
+
+    try {
+      const res = await fetch('/api/validate-coupon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: couponInput, subtotal }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setCouponError(data.message || 'Invalid voucher code');
+        setAppliedCoupon(null);
+      } else {
+        setAppliedCoupon(data.coupon);
+        showNotification(`Voucher ${data.coupon.code} applied!`);
+        setCouponError(null);
+      }
+    } catch (err: any) {
+      setCouponError('Network error verifying coupon');
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponInput('');
+    setCouponError(null);
+  };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -559,14 +606,26 @@ export default function Home() {
 
   const currentZone = SHIPPING_ZONES[selectedZone] || SHIPPING_ZONES.LK_LOCAL;
 
-  const shippingFee = (() => {
+  const rawShippingFee = (() => {
     if (subtotal === 0) return 0;
     if (currentZone.code === 'CUSTOM') return 0;
     if (currentZone.freeThresholdUsd && subtotal >= currentZone.freeThresholdUsd) return 0;
     return currentZone.baseUsd;
   })();
 
-  const grandTotal = subtotal + shippingFee;
+  const discountAmount = (() => {
+    if (!appliedCoupon) return 0;
+    if (appliedCoupon.discount_type === 'percentage') {
+      return (subtotal * appliedCoupon.discount_value) / 100;
+    }
+    if (appliedCoupon.discount_type === 'flat') {
+      return Math.min(subtotal, appliedCoupon.discount_value);
+    }
+    return 0;
+  })();
+
+  const shippingFee = appliedCoupon?.discount_type === 'free_shipping' ? 0 : rawShippingFee;
+  const grandTotal = Math.max(0, subtotal - discountAmount) + shippingFee;
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -619,6 +678,7 @@ export default function Home() {
         phone: shippingForm.phone,
         receipt_url: uploadedSlipUrl,
         status: initialStatus,
+        coupon_code: appliedCoupon?.code || null,
       };
 
       const { data: orderData, error: orderError } = await supabase
@@ -658,6 +718,7 @@ export default function Home() {
         orderId: orderNum,
         items: [...cart],
         subtotal,
+        discountAmount,
         shippingFee,
         total: grandTotal,
         customerName: shippingForm.fullName || user?.name || 'Valued Customer',
@@ -668,11 +729,11 @@ export default function Home() {
         receiptUrl: uploadedSlipUrl,
         zoneName: currentZone.name,
         paymentMethod: paymentMethodLabel,
+        couponCode: appliedCoupon?.code || null,
       };
 
       const lineItemsForNotification = cart.map((i) => ({ name: i.name, qty: i.qty, price: i.price }));
 
-      // 1. Dispatch Brevo Email Invoice & Admin Notification (Non-blocking)
       try {
         fetch('/api/send-order-email', {
           method: 'POST',
@@ -688,16 +749,17 @@ export default function Home() {
             paymentMethod: paymentMethodLabel,
             items: lineItemsForNotification,
             subtotal,
+            discountAmount,
             shippingFee,
             totalAmount: grandTotal,
             receiptUrl: uploadedSlipUrl,
+            couponCode: appliedCoupon?.code || null,
           }),
         }).catch((err) => console.warn('Email dispatch warning:', err));
       } catch (mailErr) {
         console.warn('Email trigger bypass:', mailErr);
       }
 
-      // 2. Dispatch Instant Push Notification (Telegram Webhook) (Non-blocking)
       try {
         fetch('/api/notify-order', {
           method: 'POST',
@@ -722,6 +784,8 @@ export default function Home() {
       setReceipt(newReceipt);
       setCart([]);
       setSlipFile(null);
+      setAppliedCoupon(null);
+      setCouponInput('');
       setCheckoutStep('success');
     } catch (err: any) {
       alert(`Unexpected error: ${err?.message || 'Check network connection'}`);
@@ -1346,11 +1410,11 @@ export default function Home() {
                   </div>
                   <div className="flex justify-between text-stone-400">
                     <span>Base Shipping Estimate</span>
-                    <span>{formatPrice(shippingFee)}</span>
+                    <span>{formatPrice(rawShippingFee)}</span>
                   </div>
                   <div className="flex justify-between text-sm font-semibold pt-2 border-t border-stone-200/20 text-current">
                     <span>Estimated Total</span>
-                    <span>{formatPrice(grandTotal)}</span>
+                    <span>{formatPrice(subtotal + rawShippingFee)}</span>
                   </div>
                 </div>
 
@@ -1692,6 +1756,48 @@ export default function Home() {
 
                   <div>
                     <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
+                      Promotional Voucher / Coupon
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="e.g. ZIEL10"
+                        value={couponInput}
+                        onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                        disabled={!!appliedCoupon}
+                        className={`flex-1 px-3 py-2 rounded-xl border text-xs font-mono tracking-wider uppercase focus:outline-none ${
+                          isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
+                        }`}
+                      />
+                      {appliedCoupon ? (
+                        <button
+                          type="button"
+                          onClick={handleRemoveCoupon}
+                          className="px-3 py-2 rounded-xl text-xs font-mono text-rose-400 border border-rose-800 bg-rose-950/40 hover:bg-rose-900 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleApplyCoupon}
+                          disabled={couponLoading || !couponInput.trim()}
+                          className="px-4 py-2 rounded-xl text-xs uppercase font-mono font-bold tracking-wider bg-stone-800 text-stone-200 hover:bg-stone-700 disabled:opacity-50 transition-colors"
+                        >
+                          {couponLoading ? '...' : 'Apply'}
+                        </button>
+                      )}
+                    </div>
+                    {couponError && <p className="text-[10px] text-rose-400 font-mono mt-1">{couponError}</p>}
+                    {appliedCoupon && (
+                      <p className="text-[10px] text-emerald-400 font-mono mt-1">
+                        ✓ Voucher {appliedCoupon.code} applied ({appliedCoupon.discount_type === 'percentage' ? `${appliedCoupon.discount_value}% off` : appliedCoupon.discount_type === 'free_shipping' ? 'Free Shipping' : `$${appliedCoupon.discount_value} off`})
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
                       Payment Method
                     </label>
                     <select
@@ -1747,6 +1853,12 @@ export default function Home() {
                       <span>Items ({totalCartItems})</span>
                       <span>{formatPrice(subtotal)}</span>
                     </div>
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between text-emerald-400">
+                        <span>Voucher Discount</span>
+                        <span>-{formatPrice(discountAmount)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-stone-400">
                       <span>Shipping ({currentZone.name.split('(')[0].trim()})</span>
                       <span>{selectedZone === 'CUSTOM' ? 'Quote Pending' : formatPrice(shippingFee)}</span>
@@ -1788,6 +1900,9 @@ export default function Home() {
                     <div>Address: {receipt.address}, {receipt.city}</div>
                     <div>Phone: {receipt.phone}</div>
                     <div>Payment: {receipt.paymentMethod}</div>
+                    {receipt.couponCode && (
+                      <div className="text-emerald-400">Coupon Used: {receipt.couponCode}</div>
+                    )}
                     {receipt.receiptUrl && (
                       <div className="text-emerald-400">Deposit Slip: Attached ✓</div>
                     )}
@@ -1798,6 +1913,16 @@ export default function Home() {
                           <span>{formatPrice(it.price * it.qty)}</span>
                         </div>
                       ))}
+                      {receipt.discountAmount > 0 && (
+                        <div className="flex justify-between text-emerald-400">
+                          <span>Discount Applied</span>
+                          <span>-{formatPrice(receipt.discountAmount)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-stone-400">
+                        <span>Shipping</span>
+                        <span>{formatPrice(receipt.shippingFee)}</span>
+                      </div>
                       <div className="flex justify-between font-semibold text-current pt-1 border-t border-stone-200/20">
                         <span>Total Paid</span>
                         <span>{formatPrice(receipt.total)}</span>

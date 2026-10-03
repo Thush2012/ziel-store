@@ -11,6 +11,8 @@ interface InvoiceData {
   paymentMethod: string;
   items: { name: string; qty: number; price: number }[];
   subtotal: number;
+  discountAmount?: number;
+  couponCode?: string | null;
   shippingFee: number;
   total: number;
 }
@@ -71,6 +73,9 @@ export function generateInvoicePdf(data: InvoiceData) {
   doc.text(`Method: ${data.paymentMethod}`, 340, 140);
   doc.text(`Date Issued: ${new Date().toLocaleDateString()}`, 340, 153);
   doc.text(`Origin: Katunayake, Sri Lanka`, 340, 166);
+  if (data.couponCode) {
+    doc.text(`Voucher Applied: ${data.couponCode}`, 340, 179);
+  }
 
   // Itemized Table Header
   const tableStartY = 220;
@@ -95,7 +100,6 @@ export function generateInvoicePdf(data: InvoiceData) {
     doc.text(`$${Number(item.price).toFixed(2)}`, 440, currentY, { align: 'right' });
     doc.text(`$${(item.price * item.qty).toFixed(2)}`, pageWidth - 50, currentY, { align: 'right' });
 
-    // Underline divider
     doc.setDrawColor(230, 228, 222);
     doc.line(40, currentY + 8, pageWidth - 40, currentY + 8);
     currentY += 26;
@@ -108,6 +112,14 @@ export function generateInvoicePdf(data: InvoiceData) {
   doc.setFont('helvetica', 'normal');
   doc.text('Subtotal:', summaryX - 90, currentY);
   doc.text(`$${Number(data.subtotal).toFixed(2)}`, summaryX, currentY, { align: 'right' });
+
+  if (data.discountAmount && data.discountAmount > 0) {
+    currentY += 18;
+    doc.setTextColor(16, 185, 129); // Emerald tone
+    doc.text(`Discount (${data.couponCode || 'Voucher'}):`, summaryX - 90, currentY);
+    doc.text(`-$${Number(data.discountAmount).toFixed(2)}`, summaryX, currentY, { align: 'right' });
+    doc.setTextColor(40, 40, 40);
+  }
 
   currentY += 18;
   doc.text('Logistics / Freight:', summaryX - 90, currentY);
