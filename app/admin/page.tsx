@@ -175,10 +175,62 @@ export default function AdminDashboard() {
     }
   };
 
+  // Supabase Realtime Listener on public:orders
   useEffect(() => {
-    if (isAuthorized) {
-      loadDashboardData();
-    }
+    if (!isAuthorized) return;
+
+    loadDashboardData();
+
+    const ordersChannel = supabase
+      .channel('realtime_admin_orders')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'orders' },
+        async (payload) => {
+          showNotice(`🔔 New incoming order: ${payload.new.order_number}`);
+
+          const { data: newOrderData } = await supabase
+            .from('orders')
+            .select(`
+              *,
+              order_items (
+                id,
+                product_id,
+                quantity,
+                unit_price
+              )
+            `)
+            .eq('id', payload.new.id)
+            .single();
+
+          if (newOrderData) {
+            setOrders((prev) => [newOrderData as AdminOrder, ...prev]);
+          } else {
+            setOrders((prev) => [payload.new as AdminOrder, ...prev]);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders' },
+        (payload) => {
+          setOrders((prev) =>
+            prev.map((ord) => (ord.id === payload.new.id ? { ...ord, ...payload.new } : ord))
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'orders' },
+        (payload) => {
+          setOrders((prev) => prev.filter((ord) => ord.id !== payload.old.id));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ordersChannel);
+    };
   }, [isAuthorized]);
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
@@ -461,11 +513,12 @@ export default function AdminDashboard() {
   return (
     <main className="min-h-screen bg-[#121212] text-[#F3F2EE] font-sans antialiased p-6 sm:p-12">
       {actionMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-stone-100 text-stone-950 px-4 py-3 rounded-2xl shadow-xl text-xs font-mono font-medium">
-          {actionMessage}
+        <div className="fixed bottom-6 right-6 z-50 bg-stone-100 text-stone-950 px-4 py-3 rounded-2xl shadow-xl text-xs font-mono font-medium flex items-center space-x-2">
+          <span>{actionMessage}</span>
         </div>
       )}
 
+      {/* Slip Preview Modal */}
       {previewSlipUrl && (
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
@@ -492,6 +545,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Edit Product Modal */}
       {editingProduct && (
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
@@ -621,6 +675,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Add Product Modal */}
       {isAddProductOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
@@ -736,12 +791,14 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Top Header */}
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center pb-8 border-b border-stone-800 gap-4">
         <div>
           <div className="flex items-center space-x-3">
             <span className="text-xl font-bold tracking-wider font-mono">ZIEL STORE</span>
-            <span className="text-[10px] uppercase font-mono tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              Authorized Admin
+            <span className="text-[10px] uppercase font-mono tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              Live Realtime Admin
             </span>
           </div>
           <p className="text-xs text-stone-400 mt-1 font-mono">Operator: {currentUserEmail}</p>
@@ -760,6 +817,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* Tabs */}
       <div className="max-w-7xl mx-auto my-6 flex justify-between items-center">
         <div className="flex space-x-3">
           <button
