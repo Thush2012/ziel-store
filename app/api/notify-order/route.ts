@@ -17,39 +17,39 @@ export async function POST(req: Request) {
   try {
     const body: OrderNotifyRequest = await req.json();
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
+    const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
 
     if (!botToken || !chatId) {
-      console.warn('Telegram bot credentials missing. Skipping notification.');
+      console.warn('Telegram credentials missing in environment.');
       return NextResponse.json({ success: false, reason: 'Credentials not configured' });
     }
 
-    const itemsSummary = body.items
-      .map((item) => `• ${item.qty}x ${item.name} ($${(item.price * item.qty).toFixed(2)})`)
+    const itemsSummary = (body.items || [])
+      .map((item) => `• <b>${item.qty}x</b> ${item.name} ($${(item.price * item.qty).toFixed(2)})`)
       .join('\n');
 
     const message = `
-🛍 *NEW ORDER RECEIVED!*
+🛍 <b>NEW ORDER RECEIVED!</b>
 ━━━━━━━━━━━━━━━━━━
-*Order ID:* \`${body.orderNumber}\`
-*Total Amount:* *$${body.totalAmount.toFixed(2)}*
-*Payment:* ${body.paymentMethod}
+<b>Order ID:</b> <code>${body.orderNumber}</code>
+<b>Total Billed:</b> <b>$${Number(body.totalAmount).toFixed(2)}</b>
+<b>Payment Method:</b> ${body.paymentMethod}
 
-👤 *Customer:* ${body.customerName}
-📞 *Phone:* \`${body.phone}\`
-📍 *City / Region:* ${body.city} (${body.shippingZone})
-${body.customerEmail ? `✉️ *Email:* ${body.customerEmail}\n` : ''}
-📦 *Items Ordered:*
+👤 <b>Customer:</b> ${body.customerName}
+📞 <b>Phone:</b> <code>${body.phone}</code>
+📍 <b>Destination:</b> ${body.city} (${body.shippingZone})
+${body.customerEmail ? `✉️ <b>Email:</b> ${body.customerEmail}\n` : ''}
+📦 <b>Items Ordered:</b>
 ${itemsSummary}
 
 ${
   body.receiptUrl
-    ? `📎 *Bank Slip:* [View Attached Receipt](${body.receiptUrl})`
-    : 'ℹ️ _No deposit slip attached (COD / Card)_'
+    ? `📎 <b>Deposit Slip:</b> <a href="${body.receiptUrl}">Click to View Slip</a>`
+    : 'ℹ️ <i>No slip attached (COD / Card)</i>'
 }
 ━━━━━━━━━━━━━━━━━━
-👉 [Open Admin Dashboard](https://ziel-store-nprl.vercel.app/admin)
+👉 <a href="https://ziel-store-nprl.vercel.app/admin">Open Admin Portal</a>
 `;
 
     const telegramRes = await fetch(
@@ -60,21 +60,22 @@ ${
         body: JSON.stringify({
           chat_id: chatId,
           text: message,
-          parse_mode: 'Markdown',
+          parse_mode: 'HTML',
           disable_web_page_preview: false,
         }),
       }
     );
 
+    const tgData = await telegramRes.json();
+
     if (!telegramRes.ok) {
-      const errData = await telegramRes.json();
-      console.error('Telegram API error:', errData);
-      return NextResponse.json({ success: false, error: errData }, { status: 500 });
+      console.error('Telegram API Error Response:', tgData);
+      return NextResponse.json({ success: false, error: tgData }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, message: 'Alert dispatched to Telegram' });
+    return NextResponse.json({ success: true, message: 'Telegram alert sent!' });
   } catch (error: any) {
-    console.error('Failed to send Telegram alert:', error);
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    console.error('Failed to dispatch Telegram notification:', error);
+    return NextResponse.json({ success: false, error: error?.message || 'Server error' }, { status: 500 });
   }
 }
