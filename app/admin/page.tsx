@@ -24,6 +24,8 @@ interface AdminOrder {
   shipping_address: string;
   city: string;
   phone: string;
+  customer_email?: string | null;
+  customer_name?: string | null;
   receipt_url?: string | null;
   order_items?: OrderItem[];
 }
@@ -41,6 +43,16 @@ interface AdminProduct {
   image_url?: string;
 }
 
+interface BatchRecord {
+  id: number;
+  batch_number: string;
+  product_name: string;
+  category: string;
+  abv: string;
+  harvest_date: string;
+  bottling_date: string;
+}
+
 export default function AdminDashboard() {
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
@@ -49,9 +61,10 @@ export default function AdminDashboard() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'inventory'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'inventory' | 'analytics'>('orders');
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [batches, setBatches] = useState<BatchRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [actionMessage, showNotificationMessage] = useState<string | null>(null);
@@ -168,6 +181,15 @@ export default function AdminDashboard() {
       if (!prodErr && prodData) {
         setProducts(prodData as AdminProduct[]);
       }
+
+      const { data: batchData } = await supabase
+        .from('batches')
+        .select('*')
+        .order('id', { ascending: false });
+
+      if (batchData) {
+        setBatches(batchData as BatchRecord[]);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -234,6 +256,8 @@ export default function AdminDashboard() {
   }, [isAuthorized]);
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+
     const { error } = await supabase
       .from('orders')
       .update({ status: newStatus })
@@ -246,6 +270,25 @@ export default function AdminDashboard() {
         prev.map((ord) => (ord.id === orderId ? { ...ord, status: newStatus } : ord))
       );
       showNotice(`Order marked as ${newStatus}`);
+
+      // Dispatch automated status update email to the customer
+      if (targetOrder) {
+        const recipientEmail = targetOrder.customer_email || (targetOrder.phone?.includes('@') ? targetOrder.phone : undefined);
+
+        if (recipientEmail) {
+          fetch('/api/notify-status-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orderNumber: targetOrder.order_number,
+              customerName: targetOrder.customer_name || 'Valued Customer',
+              customerEmail: recipientEmail,
+              newStatus,
+              totalAmount: targetOrder.total_amount,
+            }),
+          }).catch((err) => console.warn('Customer status email warning:', err));
+        }
+      }
     }
   };
 
@@ -506,6 +549,10 @@ export default function AdminDashboard() {
     );
   }
 
+  // Analytics Aggregates
+  const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+  const totalPendingSlips = orders.filter((o) => o.receipt_url && o.status === 'Pending').length;
+  const avgOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
   const filteredOrders = orders.filter((o) =>
     filterStatus === 'All' ? true : (o.status || 'Pending') === filterStatus
   );
@@ -808,6 +855,9 @@ export default function AdminDashboard() {
           <Link href="/" className="text-xs uppercase tracking-wider font-mono text-stone-400 hover:text-white transition-colors">
             ← Storefront
           </Link>
+          <Link href="/verify" className="text-xs uppercase tracking-wider font-mono text-stone-400 hover:text-white transition-colors">
+            Batch Registry
+          </Link>
           <button onClick={loadDashboardData} className="px-4 py-2 rounded-xl text-xs font-mono uppercase bg-stone-800 hover:bg-stone-700 transition-colors">
             Refresh
           </button>
@@ -826,7 +876,7 @@ export default function AdminDashboard() {
               activeTab === 'orders' ? 'bg-stone-100 text-stone-900 font-bold' : 'bg-stone-900 text-stone-400 hover:bg-stone-800'
             }`}
           >
-            Customer Orders ({orders.length})
+            Orders ({orders.length})
           </button>
           <button
             onClick={() => setActiveTab('inventory')}
@@ -834,7 +884,15 @@ export default function AdminDashboard() {
               activeTab === 'inventory' ? 'bg-stone-100 text-stone-900 font-bold' : 'bg-stone-900 text-stone-400 hover:bg-stone-800'
             }`}
           >
-            Inventory & Stock ({products.length})
+            Inventory ({products.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`px-5 py-2.5 rounded-xl text-xs uppercase font-mono tracking-wider transition-all ${
+              activeTab === 'analytics' ? 'bg-stone-100 text-stone-900 font-bold' : 'bg-stone-900 text-stone-400 hover:bg-stone-800'
+            }`}
+          >
+            Sales Analytics
           </button>
         </div>
 
@@ -852,6 +910,71 @@ export default function AdminDashboard() {
       <div className="max-w-7xl mx-auto">
         {loading ? (
           <div className="py-20 text-center font-mono text-xs text-stone-500">Loading store records...</div>
+        ) : activeTab === 'analytics' ? (
+          <div className="space-y-6 font-mono text-xs">
+            {/* Top KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-6 rounded-2xl bg-stone-900/60 border border-stone-800">
+                <span className="text-[10px] uppercase text-stone-500 block mb-1">Gross Revenue</span>
+                <span className="text-2xl font-bold text-white">${totalRevenue.toFixed(2)}</span>
+                <span className="text-[10px] text-stone-400 block mt-1">Across all order records</span>
+              </div>
+              <div className="p-6 rounded-2xl bg-stone-900/60 border border-stone-800">
+                <span className="text-[10px] uppercase text-stone-500 block mb-1">Total Orders</span>
+                <span className="text-2xl font-bold text-white">{orders.length}</span>
+                <span className="text-[10px] text-stone-400 block mt-1">Confirmed customer orders</span>
+              </div>
+              <div className="p-6 rounded-2xl bg-stone-900/60 border border-stone-800">
+                <span className="text-[10px] uppercase text-stone-500 block mb-1">Average Order Value</span>
+                <span className="text-2xl font-bold text-white">${avgOrderValue.toFixed(2)}</span>
+                <span className="text-[10px] text-stone-400 block mt-1">Mean cart checkout value</span>
+              </div>
+              <div className="p-6 rounded-2xl bg-stone-900/60 border border-stone-800">
+                <span className="text-[10px] uppercase text-stone-500 block mb-1">Pending Slips</span>
+                <span className="text-2xl font-bold text-amber-400">{totalPendingSlips}</span>
+                <span className="text-[10px] text-stone-400 block mt-1">Awaiting payment verification</span>
+              </div>
+            </div>
+
+            {/* Inventory Status & Batches Registered */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="p-6 rounded-2xl bg-stone-900/60 border border-stone-800 space-y-4">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-white">Stock Level Summary</h3>
+                <div className="space-y-2">
+                  {products.map((p) => (
+                    <div key={p.id} className="flex justify-between items-center border-b border-stone-800/60 pb-2">
+                      <span className="text-stone-300 truncate max-w-[200px]">{p.name}</span>
+                      <div className="flex items-center space-x-3">
+                        <span className="text-stone-400">${Number(p.price).toFixed(2)}</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          (p.stock_qty || 0) <= 5 ? 'bg-rose-950 text-rose-300' : 'bg-stone-800 text-stone-300'
+                        }`}>
+                          {p.stock_qty ?? 0} in stock
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-6 rounded-2xl bg-stone-900/60 border border-stone-800 space-y-4">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-white">Registered Batches</h3>
+                <div className="space-y-2">
+                  {batches.map((b) => (
+                    <div key={b.id} className="flex justify-between items-center border-b border-stone-800/60 pb-2">
+                      <div>
+                        <span className="text-amber-400 font-bold block">{b.batch_number}</span>
+                        <span className="text-[10px] text-stone-400">{b.product_name}</span>
+                      </div>
+                      <span className="text-[10px] bg-stone-800 px-2 py-1 rounded text-stone-300">
+                        {b.abv} ABV
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         ) : activeTab === 'orders' ? (
           <div className="space-y-6">
             <div className="flex flex-wrap items-center gap-2 pb-2">

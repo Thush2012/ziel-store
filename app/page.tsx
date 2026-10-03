@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
+import { generateInvoicePdf } from '../lib/generatePdf';
 
 interface Product {
   id: number;
@@ -361,7 +362,22 @@ export default function Home() {
     if (savedTheme) setIsDarkMode(savedTheme === 'dark');
 
     const savedCurrency = localStorage.getItem('ziel_currency') as Currency;
-    if (savedCurrency && CURRENCIES[savedCurrency]) setCurrency(savedCurrency);
+    if (savedCurrency && CURRENCIES[savedCurrency]) {
+      setCurrency(savedCurrency);
+    } else {
+      // Auto-detect country, local currency, and shipping destination
+      fetch('/api/geo')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.defaultCurrency && CURRENCIES[data.defaultCurrency as Currency]) {
+            setCurrency(data.defaultCurrency as Currency);
+          }
+          if (data?.defaultZone && SHIPPING_ZONES[data.defaultZone]) {
+            setSelectedZone(data.defaultZone);
+          }
+        })
+        .catch((err) => console.warn('Geo detection note:', err));
+    }
   }, []);
 
   useEffect(() => {
@@ -681,7 +697,7 @@ export default function Home() {
         console.warn('Email trigger bypass:', mailErr);
       }
 
-      // 2. Dispatch Instant Push Notification (Telegram / Webhook) (Non-blocking)
+      // 2. Dispatch Instant Push Notification (Telegram Webhook) (Non-blocking)
       try {
         fetch('/api/notify-order', {
           method: 'POST',
@@ -1789,6 +1805,31 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+
+                <button
+                  onClick={() => {
+                    if (receipt) {
+                      generateInvoicePdf({
+                        orderId: receipt.orderId,
+                        customerName: receipt.customerName,
+                        customerEmail: receipt.customerEmail,
+                        phone: receipt.phone,
+                        address: receipt.address,
+                        city: receipt.city,
+                        zoneName: receipt.zoneName,
+                        paymentMethod: receipt.paymentMethod,
+                        items: receipt.items,
+                        subtotal: receipt.subtotal,
+                        shippingFee: receipt.shippingFee,
+                        total: receipt.total,
+                      });
+                    }
+                  }}
+                  className="w-full mb-3 py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold border border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-all flex items-center justify-center gap-2"
+                >
+                  <span>📥</span>
+                  <span>Download Official PDF Receipt</span>
+                </button>
 
                 <button
                   onClick={() => {
