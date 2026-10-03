@@ -25,6 +25,7 @@ interface OrderReceipt {
   shippingFee: number;
   total: number;
   customerName: string;
+  customerEmail?: string;
   address: string;
   city: string;
   phone: string;
@@ -247,10 +248,11 @@ export default function Home() {
   const [selectedZone, setSelectedZone] = useState<string>('LK_LOCAL');
   const [shippingForm, setShippingForm] = useState({
     fullName: '',
+    email: '',
     phone: '',
     address: '',
     city: 'Colombo',
-    paymentMethod: 'cod',
+    paymentMethod: 'bank',
   });
   const [slipFile, setSlipFile] = useState<File | null>(null);
   const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
@@ -628,6 +630,13 @@ export default function Home() {
         }
       }
 
+      const paymentMethodLabel =
+        shippingForm.paymentMethod === 'cod'
+          ? 'Cash on Delivery'
+          : shippingForm.paymentMethod === 'card'
+          ? 'Credit/Debit Card'
+          : 'Direct Bank Transfer';
+
       const newReceipt: OrderReceipt = {
         orderId: orderNum,
         items: [...cart],
@@ -635,18 +644,63 @@ export default function Home() {
         shippingFee,
         total: grandTotal,
         customerName: shippingForm.fullName || user?.name || 'Valued Customer',
+        customerEmail: shippingForm.email || user?.email || undefined,
         address: shippingForm.address,
         city: shippingForm.city,
         phone: shippingForm.phone,
         receiptUrl: uploadedSlipUrl,
         zoneName: currentZone.name,
-        paymentMethod:
-          shippingForm.paymentMethod === 'cod'
-            ? 'Cash on Delivery'
-            : shippingForm.paymentMethod === 'card'
-            ? 'Credit/Debit Card'
-            : 'Direct Bank Transfer',
+        paymentMethod: paymentMethodLabel,
       };
+
+      const lineItemsForNotification = cart.map((i) => ({ name: i.name, qty: i.qty, price: i.price }));
+
+      // 1. Dispatch Brevo Email Invoice & Admin Notification (Non-blocking)
+      try {
+        fetch('/api/send-order-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderNumber: orderNum,
+            customerName: shippingForm.fullName || user?.name || 'Valued Customer',
+            customerEmail: shippingForm.email || user?.email || undefined,
+            phone: shippingForm.phone,
+            address: shippingForm.address,
+            city: shippingForm.city,
+            shippingZone: currentZone.name,
+            paymentMethod: paymentMethodLabel,
+            items: lineItemsForNotification,
+            subtotal,
+            shippingFee,
+            totalAmount: grandTotal,
+            receiptUrl: uploadedSlipUrl,
+          }),
+        }).catch((err) => console.warn('Email dispatch warning:', err));
+      } catch (mailErr) {
+        console.warn('Email trigger bypass:', mailErr);
+      }
+
+      // 2. Dispatch Instant Push Notification (Telegram / Webhook) (Non-blocking)
+      try {
+        fetch('/api/notify-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderNumber: orderNum,
+            customerName: shippingForm.fullName || user?.name || 'Valued Customer',
+            customerEmail: shippingForm.email || user?.email || undefined,
+            phone: shippingForm.phone,
+            city: shippingForm.city,
+            shippingZone: currentZone.name,
+            paymentMethod: paymentMethodLabel,
+            totalAmount: grandTotal,
+            items: lineItemsForNotification,
+            receiptUrl: uploadedSlipUrl,
+          }),
+        }).catch((err) => console.warn('Push alert warning:', err));
+      } catch (pushErr) {
+        console.warn('Push trigger bypass:', pushErr);
+      }
 
       setReceipt(newReceipt);
       setCart([]);
@@ -1230,7 +1284,7 @@ export default function Home() {
             <div className="p-6 overflow-y-auto flex-1 space-y-4 divide-y divide-stone-200/20">
               {cart.length === 0 ? (
                 <div className="py-20 text-center">
-                  <div className="text-3xl mb-2">🛍️</div>
+                  <div className="text-3xl mb-2">🛍</div>
                   <p className="text-xs font-mono text-stone-400">Your shopping bag is currently empty.</p>
                 </div>
               ) : (
@@ -1518,6 +1572,22 @@ export default function Home() {
 
                   <div>
                     <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
+                      Email Address (For Invoice & Tracking) *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="name@example.com"
+                      value={shippingForm.email}
+                      onChange={(e) => setShippingForm({ ...shippingForm, email: e.target.value })}
+                      className={`w-full px-4 py-2.5 rounded-xl border text-xs focus:outline-none ${
+                        isDarkMode ? 'bg-stone-900 border-stone-700 text-stone-100' : 'bg-white border-stone-300 text-stone-900'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
                       Shipping Destination / Zone *
                     </label>
                     <select
@@ -1695,6 +1765,7 @@ export default function Home() {
                     <div className="border-b pb-2 mb-2 font-semibold">
                       Recipient: {receipt.customerName}
                     </div>
+                    {receipt.customerEmail && <div>Email: {receipt.customerEmail}</div>}
                     <div>Destination: {receipt.zoneName}</div>
                     <div>Address: {receipt.address}, {receipt.city}</div>
                     <div>Phone: {receipt.phone}</div>
