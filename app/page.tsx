@@ -2,9 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { supabase } from '../lib/supabaseClient';
 import { generateInvoicePdf } from '../lib/generatePdf';
-import ZielHeroExperience from '../components/ZielHeroExperience';
+
+// Dynamically import ScrollyHero with SSR disabled for Three.js WebGL canvas compatibility
+const ScrollyHero = dynamic(() => import('../components/ScrollyHero'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-screen w-full bg-[#0E0E0D] flex items-center justify-center font-mono text-xs text-stone-500">
+      Initializing 3D Artisanal Scene...
+    </div>
+  ),
+});
 
 interface Product {
   id: number;
@@ -224,7 +234,7 @@ const FAQS = [
 ];
 
 export default function Home() {
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [currency, setCurrency] = useState<Currency>('USD');
   const [searchQuery, setSearchQuery] = useState('');
@@ -795,8 +805,8 @@ export default function Home() {
     }
   };
 
-  const bgMain = isDarkMode ? 'bg-[#141413] text-[#F0EFEA]' : 'bg-[#FAF9F5] text-[#1C1B1A]';
-  const headerBg = isDarkMode ? 'bg-[#141413]/80 border-stone-800' : 'bg-[#FAF9F5]/80 border-stone-200/60';
+  const bgMain = isDarkMode ? 'bg-[#0E0E0D] text-[#F0EFEA]' : 'bg-[#FAF9F5] text-[#1C1B1A]';
+  const headerBg = isDarkMode ? 'bg-[#0E0E0D]/80 border-stone-800' : 'bg-[#FAF9F5]/80 border-stone-200/60';
   const cardBorder = isDarkMode ? 'border-stone-800 hover:border-stone-700' : 'border-stone-200/40 hover:border-stone-300';
   const modalBg = isDarkMode ? 'bg-[#1A1918] border-stone-800 text-[#F0EFEA]' : 'bg-[#FAF9F5] border-stone-200/80 text-[#1C1B1A]';
   const pillActive = isDarkMode ? 'bg-[#F0EFEA] text-[#141413]' : 'bg-stone-900 text-[#FAF9F5]';
@@ -811,15 +821,13 @@ export default function Home() {
         </div>
       )}
 
-      {/* Top Notification Bar */}
       <div className={`py-1.5 px-4 text-center text-[10px] uppercase font-mono tracking-widest border-b ${
         isDarkMode ? 'bg-stone-900 border-stone-800 text-stone-400' : 'bg-stone-100 border-stone-200 text-stone-600'
       }`}>
         Batch No. 04 Now Available • Worldwide Air Export & Islandwide Delivery
       </div>
 
-      {/* Header */}
-      <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3 flex items-center justify-between gap-2`}>
+      <header className={`sticky top-0 z-40 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3 flex items-center justify-between gap-2`}>
         <div className="flex items-center space-x-2 shrink-0">
           <img
             src="/logo.png"
@@ -833,6 +841,7 @@ export default function Home() {
         </div>
 
         <nav className={`hidden md:flex items-center space-x-10 text-xs font-medium uppercase tracking-widest ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
+          <a href="#story" className="hover:text-amber-400 transition-colors">Craft Experience</a>
           <a href="#works" className="hover:text-current transition-colors">Catalog</a>
           <a href="#about" className="hover:text-current transition-colors">Craftsmanship</a>
           <Link href="/verify" className="hover:text-amber-500 transition-colors">Verify Batch</Link>
@@ -902,13 +911,12 @@ export default function Home() {
         </div>
       </header>
 
-      {/* ========================================================================= */}
-      {/* CINEMATIC HERO EXPERIENCE (SCROLLYTELLING ANIMATION WITH AUTO-SCROLL TOUR) */}
-      {/* ========================================================================= */}
-      <ZielHeroExperience />
+      {/* 3D Scrollytelling Experience & Auto-Scroll Presentation */}
+      <div id="story">
+        <ScrollyHero />
+      </div>
 
-      {/* Intro Mission Statement */}
-      <section className="px-6 sm:px-12 pt-16 sm:pt-24 pb-10 sm:pb-12 max-w-7xl mx-auto">
+      <section className="px-6 sm:px-12 pt-16 sm:pt-24 pb-8 max-w-7xl mx-auto">
         <p className={`text-[10px] sm:text-xs uppercase tracking-[0.25em] font-semibold mb-3 sm:mb-4 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
           Artisanal Fermentations & Handcrafted Formulations
         </p>
@@ -917,8 +925,7 @@ export default function Home() {
         </h1>
       </section>
 
-      {/* Main Works Section Header & Filter Controls */}
-      <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pb-8 sm:pb-10 scroll-mt-20">
+      <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pb-8 sm:pb-10">
         <div className={`flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b pb-6 ${
           isDarkMode ? 'border-stone-800' : 'border-stone-200/80'
         }`}>
@@ -992,7 +999,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Product Catalog Grid */}
       <section className="px-6 sm:px-12 max-w-7xl mx-auto pb-24">
         {filteredProducts.length === 0 ? (
           <div className="py-20 text-center">
@@ -1064,8 +1070,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* Brand & Craftsmanship Section */}
-      <section id="about" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800 bg-[#171615]' : 'border-stone-200/80 bg-[#F4F2EC]'}`}>
+      <section id="about" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800 bg-[#141413]' : 'border-stone-200/80 bg-[#F4F2EC]'}`}>
         <div className="max-w-7xl mx-auto">
           <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
             Behind The Brand
@@ -1098,7 +1103,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ Section */}
       <section id="faq" className="py-16 sm:py-20 px-6 sm:px-12 max-w-5xl mx-auto">
         <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
           Answers & Information
@@ -1135,7 +1139,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Contact Section */}
       <section id="contact" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800' : 'border-stone-200'}`}>
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
           <div>
@@ -1234,7 +1237,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Product Quick-View Modal */}
       {activeProduct && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 transition-opacity overflow-y-auto"
@@ -1356,7 +1358,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Cart Drawer */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end">
           <div className="fixed inset-0" onClick={() => setIsCartOpen(false)} />
@@ -1451,7 +1452,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Orders History Modal */}
       {isOrdersOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
@@ -1509,7 +1509,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Authentication Modal */}
       {isAuthOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1637,7 +1636,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Checkout Modal */}
       {isCheckoutOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
@@ -1964,9 +1962,10 @@ export default function Home() {
                         paymentMethod: receipt.paymentMethod,
                         items: receipt.items,
                         subtotal: receipt.subtotal,
+                        discountAmount: receipt.discountAmount,
+                        couponCode: receipt.couponCode,
                         shippingFee: receipt.shippingFee,
                         total: receipt.total,
-                        couponCode: receipt.couponCode,
                       });
                     }
                   }}
@@ -1993,7 +1992,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Footer */}
       <footer className={`border-t py-12 px-6 sm:px-12 text-center text-xs font-mono ${
         isDarkMode ? 'border-stone-800 text-stone-500' : 'border-stone-200/80 text-stone-400'
       }`}>
