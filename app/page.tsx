@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 import { generateInvoicePdf } from '../lib/generatePdf';
@@ -223,7 +223,7 @@ const FAQS = [
 ];
 
 export default function Home() {
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [currency, setCurrency] = useState<Currency>('USD');
   const [searchQuery, setSearchQuery] = useState('');
@@ -274,6 +274,11 @@ export default function Home() {
 
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
+
+  // 3D Scrollytelling Fly-Through Refs & State
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const flythroughContainerRef = useRef<HTMLDivElement | null>(null);
+  const [scrollProgress, setScrollProgress] = useState(0);
 
   const formatPrice = (amountInUsd: number) => {
     const { symbol, rate, decimals } = CURRENCIES[currency];
@@ -403,6 +408,123 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem('ziel_currency', currency);
   }, [currency]);
+
+  // Scroll listener for 3D fly-through calculation
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!flythroughContainerRef.current) return;
+      const rect = flythroughContainerRef.current.getBoundingClientRect();
+      const windowHeight = window.innerHeight;
+      const totalScrollable = rect.height - windowHeight;
+      const currentScroll = -rect.top;
+      const progress = Math.min(Math.max(currentScroll / totalScrollable, 0), 1);
+      setScrollProgress(progress);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // 3D Canvas Fly-Through and Particle Dissolution Rendering
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
+
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', handleResize);
+
+    // Generate floating 3D particle shards
+    interface Shard {
+      x: number;
+      y: number;
+      z: number;
+      size: number;
+      color: string;
+      speedZ: number;
+      rot: number;
+      rotSpeed: number;
+    }
+
+    const shardCount = 180;
+    const shards: Shard[] = [];
+    const colors = ['#f59e0b', '#d97706', '#b45309', '#fef3c7', '#78350f'];
+
+    for (let i = 0; i < shardCount; i++) {
+      shards.push({
+        x: (Math.random() - 0.5) * width * 2,
+        y: (Math.random() - 0.5) * height * 2,
+        z: Math.random() * 1500,
+        size: Math.random() * 8 + 3,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        speedZ: Math.random() * 1.5 + 0.8,
+        rot: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 0.04,
+      });
+    }
+
+    const render = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      // Camera depth pushed directly by scroll progress
+      const cameraZBoost = scrollProgress * 1400;
+      const fov = 400;
+      const centerX = width / 2;
+      const centerY = height / 2;
+
+      // Draw 3D Shards
+      shards.forEach((shard) => {
+        let relativeZ = (shard.z - cameraZBoost) % 1500;
+        if (relativeZ < 0) relativeZ += 1500;
+
+        const scale = fov / (fov + relativeZ);
+        const screenX = centerX + shard.x * scale;
+        const screenY = centerY + shard.y * scale;
+
+        // Particle dissolution factor
+        const fade = Math.sin((relativeZ / 1500) * Math.PI);
+        const alpha = Math.max(0, Math.min(fade * (1 - scrollProgress * 0.3), 1));
+
+        ctx.save();
+        ctx.translate(screenX, screenY);
+        ctx.rotate(shard.rot);
+        ctx.fillStyle = shard.color;
+        ctx.globalAlpha = alpha;
+
+        // Draw diamond shard geometry
+        ctx.beginPath();
+        const s = shard.size * scale * (1 + scrollProgress * 1.5);
+        ctx.moveTo(0, -s * 1.8);
+        ctx.lineTo(s, 0);
+        ctx.lineTo(0, s * 1.8);
+        ctx.lineTo(-s, 0);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
+
+        shard.rot += shard.rotSpeed;
+      });
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [scrollProgress]);
 
   const showNotification = (msg: string) => {
     setToastMessage(msg);
@@ -802,7 +924,7 @@ export default function Home() {
   const pillInactive = isDarkMode ? 'bg-stone-800/60 text-stone-300 hover:bg-stone-800' : 'bg-stone-200/50 text-stone-600 hover:bg-stone-200';
 
   return (
-    <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
+    <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-amber-400 selection:text-stone-950 scroll-smooth`}>
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 px-4 py-3 rounded-2xl shadow-xl text-xs font-medium tracking-wide flex items-center space-x-2 animate-bounce">
           <span>✨</span>
@@ -810,13 +932,15 @@ export default function Home() {
         </div>
       )}
 
-      <div className={`py-1.5 px-4 text-center text-[10px] uppercase font-mono tracking-widest border-b ${
+      {/* Top Banner */}
+      <div className={`py-1.5 px-4 text-center text-[10px] uppercase font-mono tracking-widest border-b z-40 relative ${
         isDarkMode ? 'bg-stone-900 border-stone-800 text-stone-400' : 'bg-stone-100 border-stone-200 text-stone-600'
       }`}>
         Batch No. 04 Now Available • Worldwide Air Export & Islandwide Delivery
       </div>
 
-      <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3 flex items-center justify-between gap-2`}>
+      {/* Sticky Header */}
+      <header className={`sticky top-0 z-40 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3 flex items-center justify-between gap-2`}>
         <div className="flex items-center space-x-2 shrink-0">
           <img
             src="/logo.png"
@@ -830,6 +954,7 @@ export default function Home() {
         </div>
 
         <nav className={`hidden md:flex items-center space-x-10 text-xs font-medium uppercase tracking-widest ${isDarkMode ? 'text-stone-400' : 'text-stone-500'}`}>
+          <a href="#hero-flythrough" className="hover:text-amber-400 transition-colors">Experience</a>
           <a href="#works" className="hover:text-current transition-colors">Catalog</a>
           <a href="#about" className="hover:text-current transition-colors">Craftsmanship</a>
           <Link href="/verify" className="hover:text-amber-500 transition-colors">Verify Batch</Link>
@@ -899,15 +1024,93 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="px-6 sm:px-12 pt-12 sm:pt-20 pb-10 sm:pb-12 max-w-7xl mx-auto">
-        <p className={`text-[10px] sm:text-xs uppercase tracking-[0.25em] font-semibold mb-3 sm:mb-4 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
-          Artisanal Fermentations & Handcrafted Formulations
-        </p>
-        <h1 className="text-3xl sm:text-6xl lg:text-7xl font-light tracking-[-0.03em] leading-[1.1] max-w-4xl">
-          Thoughtfully created products built with <span className={`italic font-normal ${isDarkMode ? 'text-stone-400' : 'text-stone-600'}`}>precision & care.</span>
-        </h1>
+      {/* 3D SCROLL-DRIVEN CAMERA FLY-THROUGH SECTION */}
+      <section
+        id="hero-flythrough"
+        ref={flythroughContainerRef}
+        className="relative h-[250vh] w-full bg-[#0a0a09] overflow-visible"
+      >
+        <div className="sticky top-0 h-screen w-full overflow-hidden flex items-center justify-center">
+          {/* WebGL / Canvas 3D Space */}
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full pointer-events-none z-10"
+          />
+
+          {/* Radial Ambient Backlight */}
+          <div
+            className="absolute w-[600px] h-[600px] rounded-full blur-[140px] pointer-events-none transition-all duration-300 z-0"
+            style={{
+              background: `radial-gradient(circle, rgba(217, 119, 6, ${0.15 + scrollProgress * 0.3}) 0%, rgba(0,0,0,0) 70%)`,
+              transform: `scale(${1 + scrollProgress * 1.5})`,
+            }}
+          />
+
+          {/* Foreground Dynamic Assembly Text (ZIEL) */}
+          <div className="relative z-20 flex flex-col items-center justify-center text-center px-6">
+            <span
+              className="text-[10px] sm:text-xs font-mono uppercase tracking-[0.4em] text-amber-500/80 mb-4 transition-all duration-300"
+              style={{
+                opacity: Math.max(0, 1 - scrollProgress * 2),
+                transform: `translateY(-${scrollProgress * 40}px)`,
+              }}
+            >
+              Artisanal Fermentations & Craft Formulations
+            </span>
+
+            {/* Central Giant 3D Brand Assembly */}
+            <div
+              className="relative transition-transform duration-200"
+              style={{
+                transform: `scale(${0.7 + scrollProgress * 1.3}) translateY(-${scrollProgress * 20}px)`,
+                filter: `drop-shadow(0 0 ${20 + scrollProgress * 40}px rgba(217,119,6,0.5))`,
+              }}
+            >
+              <h1 className="text-7xl sm:text-9xl md:text-[14rem] font-bold tracking-[-0.05em] text-white leading-none uppercase select-none">
+                ZIEL
+              </h1>
+              <div
+                className="absolute inset-0 bg-gradient-to-t from-amber-500/40 via-transparent to-transparent opacity-80 mix-blend-overlay pointer-events-none"
+              />
+            </div>
+
+            <p
+              className="text-xs sm:text-sm font-light text-stone-400 max-w-md mx-auto mt-6 tracking-wide leading-relaxed transition-all duration-300"
+              style={{
+                opacity: scrollProgress > 0.4 ? (scrollProgress - 0.4) * 2 : 0,
+                transform: `translateY(${Math.max(0, (1 - scrollProgress) * 30)}px)`,
+              }}
+            >
+              Crafted in Katunayake, Sri Lanka. Natural king coconut wine and heavy-duty cold-process botanicals.
+            </p>
+
+            {/* Scroll Indicator */}
+            <div
+              className="mt-12 flex flex-col items-center space-y-2 transition-opacity duration-300"
+              style={{ opacity: Math.max(0, 1 - scrollProgress * 3) }}
+            >
+              <span className="text-[9px] uppercase font-mono tracking-widest text-stone-500">
+                Scroll To Enter
+              </span>
+              <div className="w-5 h-9 rounded-full border border-stone-700 flex items-start justify-center p-1">
+                <div className="w-1 h-2 rounded-full bg-amber-400 animate-bounce" />
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
+      {/* Intro Mission Statement */}
+      <section className="px-6 sm:px-12 pt-12 sm:pt-20 pb-10 sm:pb-12 max-w-7xl mx-auto">
+        <p className={`text-[10px] sm:text-xs uppercase tracking-[0.25em] font-semibold mb-3 sm:mb-4 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
+          Natural Alchemy Meets Industrial Precision
+        </p>
+        <h2 className="text-3xl sm:text-6xl lg:text-7xl font-light tracking-[-0.03em] leading-[1.1] max-w-4xl">
+          Thoughtfully created products built with <span className={`italic font-normal ${isDarkMode ? 'text-stone-400' : 'text-stone-600'}`}>precision & care.</span>
+        </h2>
+      </section>
+
+      {/* Filter & Product Section */}
       <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pb-8 sm:pb-10">
         <div className={`flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b pb-6 ${
           isDarkMode ? 'border-stone-800' : 'border-stone-200/80'
@@ -982,6 +1185,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Product Grid */}
       <section className="px-6 sm:px-12 max-w-7xl mx-auto pb-24">
         {filteredProducts.length === 0 ? (
           <div className="py-20 text-center">
@@ -1053,6 +1257,7 @@ export default function Home() {
         )}
       </section>
 
+      {/* Craftsmanship Section */}
       <section id="about" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800 bg-[#171615]' : 'border-stone-200/80 bg-[#F4F2EC]'}`}>
         <div className="max-w-7xl mx-auto">
           <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
@@ -1086,6 +1291,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* FAQ */}
       <section id="faq" className="py-16 sm:py-20 px-6 sm:px-12 max-w-5xl mx-auto">
         <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-stone-400'}`}>
           Answers & Information
@@ -1122,6 +1328,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Contact Section */}
       <section id="contact" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800' : 'border-stone-200'}`}>
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
           <div>
@@ -1220,6 +1427,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Product Detail Modal */}
       {activeProduct && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 transition-opacity overflow-y-auto"
@@ -1341,6 +1549,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* Cart Slider */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end">
           <div className="fixed inset-0" onClick={() => setIsCartOpen(false)} />
@@ -1435,6 +1644,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* Order History Modal */}
       {isOrdersOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
@@ -1492,6 +1702,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* Auth Modal */}
       {isAuthOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1619,6 +1830,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* Checkout Modal */}
       {isCheckoutOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
@@ -1945,6 +2157,8 @@ export default function Home() {
                         paymentMethod: receipt.paymentMethod,
                         items: receipt.items,
                         subtotal: receipt.subtotal,
+                        discountAmount: receipt.discountAmount,
+                        couponCode: receipt.couponCode,
                         shippingFee: receipt.shippingFee,
                         total: receipt.total,
                       });
@@ -1973,6 +2187,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* Footer */}
       <footer className={`border-t py-12 px-6 sm:px-12 text-center text-xs font-mono ${
         isDarkMode ? 'border-stone-800 text-stone-500' : 'border-stone-200/80 text-stone-400'
       }`}>
