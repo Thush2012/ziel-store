@@ -1,196 +1,282 @@
 'use client';
 
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Float } from '@react-three/drei';
 import * as THREE from 'three';
 
-// 1. Procedural Artisanal King Coconut (Thambili teardrop shape + stem cap)
-function KingCoconut({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
-  const meshRef = useRef<THREE.Group>(null);
+// 1. Realistic Ceylon King Coconut (Thambili)
+function RealisticKingCoconut({ position, scale = 1, rotationSpeed = 0.4 }: { position: [number, number, number]; scale?: number; rotationSpeed?: number }) {
+  const groupRef = useRef<THREE.Group>(null);
 
   useFrame((_, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += delta * 0.4;
-      meshRef.current.rotation.x += delta * 0.2;
+    if (groupRef.current) {
+      groupRef.current.rotation.y += delta * rotationSpeed;
+      groupRef.current.rotation.x += delta * (rotationSpeed * 0.5);
     }
   });
 
   return (
-    <Float speed={2} rotationIntensity={1.2} floatIntensity={1.8}>
-      <group ref={meshRef} position={position} scale={scale}>
-        {/* Main Tapered Fruit Body */}
-        <mesh position={[0, 0, 0]} scale={[1, 1.35, 1]}>
-          <sphereGeometry args={[0.9, 32, 32]} />
-          <meshStandardMaterial
-            color="#E88C28" // Vibrant Ceylon King Coconut Golden Orange
-            roughness={0.45}
-            metalness={0.05}
-          />
+    <Float speed={2} rotationIntensity={1.3} floatIntensity={1.8}>
+      <group ref={groupRef} position={position} scale={scale}>
+        {/* Upper rounded body */}
+        <mesh position={[0, 0.2, 0]} scale={[1.1, 1.25, 1.05]}>
+          <sphereGeometry args={[0.85, 32, 32]} />
+          <meshStandardMaterial color="#F28518" roughness={0.42} metalness={0.02} />
         </mesh>
-        {/* Calyx & Stem at Top */}
-        <mesh position={[0, 1.25, 0]}>
-          <coneGeometry args={[0.28, 0.35, 12]} />
-          <meshStandardMaterial color="#8B6932" roughness={0.7} />
+
+        {/* Lower tapered conical base characteristic of King Coconuts */}
+        <mesh position={[0, -0.65, 0]} rotation={[Math.PI, 0, 0]} scale={[1.05, 1.15, 1.02]}>
+          <coneGeometry args={[0.85, 1.1, 32]} />
+          <meshStandardMaterial color="#E8760C" roughness={0.48} metalness={0.02} />
         </mesh>
-        <mesh position={[0, 1.45, 0]} rotation={[0.2, 0, 0.1]}>
-          <cylinderGeometry args={[0.06, 0.08, 0.35, 8]} />
-          <meshStandardMaterial color="#6B5024" roughness={0.9} />
+
+        {/* Calyx Crown / Stem petals */}
+        <mesh position={[0, 1.22, 0]}>
+          <cylinderGeometry args={[0.3, 0.4, 0.15, 6]} />
+          <meshStandardMaterial color="#8C733E" roughness={0.8} />
+        </mesh>
+
+        {/* Hard Woody Stalk Node */}
+        <mesh position={[0.04, 1.38, 0]} rotation={[0.15, 0, 0.2]}>
+          <cylinderGeometry args={[0.07, 0.1, 0.3, 12]} />
+          <meshStandardMaterial color="#6E5528" roughness={0.9} />
         </mesh>
       </group>
     </Float>
   );
 }
 
-// 2. Procedural Luxury Wine Bottle (750ml profile: punt base, body, shoulder, neck, foil cap)
-function WineBottle({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
-  const meshRef = useRef<THREE.Group>(null);
+// 2. Realistic Ziel King Coconut Wine Bottle (Glass + Gold Label + Liquid + Foil Cap)
+function RealisticWineBottle({ position, scale = 1, rotationSpeed = 0.35 }: { position: [number, number, number]; scale?: number; rotationSpeed?: number }) {
+  const groupRef = useRef<THREE.Group>(null);
 
   useFrame((_, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += delta * 0.35;
-      meshRef.current.rotation.z += delta * 0.15;
+    if (groupRef.current) {
+      groupRef.current.rotation.y += delta * rotationSpeed;
+      groupRef.current.rotation.z += delta * (rotationSpeed * 0.3);
     }
   });
 
   return (
     <Float speed={1.8} rotationIntensity={1} floatIntensity={1.5}>
-      <group ref={meshRef} position={position} scale={scale}>
-        {/* Cylindrical Main Bottle Body */}
-        <mesh position={[0, 0, 0]}>
-          <cylinderGeometry args={[0.55, 0.55, 1.8, 32]} />
+      <group ref={groupRef} position={position} scale={scale}>
+        {/* Outer Clear / Amber Tint Glass Body */}
+        <mesh position={[0, -0.2, 0]}>
+          <cylinderGeometry args={[0.55, 0.55, 1.7, 32]} />
           <meshPhysicalMaterial
-            color="#EAC06C" // Warm golden fermented king coconut nectar glow
-            transmission={0.88}
-            opacity={1}
+            color="#FFF4DE"
+            transmission={0.9}
             transparent
-            roughness={0.12}
-            ior={1.48}
-            reflectivity={0.6}
+            roughness={0.08}
+            ior={1.52}
+            reflectivity={0.7}
             clearcoat={1}
-            clearcoatRoughness={0.1}
+            clearcoatRoughness={0.05}
           />
         </mesh>
-        {/* Shoulder Taper */}
-        <mesh position={[0, 1.15, 0]}>
-          <cylinderGeometry args={[0.2, 0.55, 0.5, 32]} />
+
+        {/* Golden Fermented Coconut Wine Liquid Inside */}
+        <mesh position={[0, -0.22, 0]}>
+          <cylinderGeometry args={[0.5, 0.5, 1.6, 32]} />
+          <meshStandardMaterial
+            color="#E5A638"
+            roughness={0.2}
+            metalness={0.1}
+          />
+        </mesh>
+
+        {/* Realistic Label Wrap */}
+        <mesh position={[0, -0.2, 0]}>
+          <cylinderGeometry args={[0.555, 0.555, 0.9, 32, 1, true, 0, Math.PI * 1.5]} />
+          <meshStandardMaterial
+            color="#FAF7F0"
+            roughness={0.7}
+          />
+        </mesh>
+
+        {/* Bottle Shoulder Taper */}
+        <mesh position={[0, 0.9, 0]}>
+          <cylinderGeometry args={[0.2, 0.55, 0.55, 32]} />
           <meshPhysicalMaterial
-            color="#EAC06C"
-            transmission={0.88}
-            opacity={1}
+            color="#FFF4DE"
+            transmission={0.9}
             transparent
-            roughness={0.12}
-            ior={1.48}
-            reflectivity={0.6}
+            roughness={0.08}
+            ior={1.52}
             clearcoat={1}
           />
         </mesh>
-        {/* Neck */}
-        <mesh position={[0, 1.6, 0]}>
-          <cylinderGeometry args={[0.18, 0.18, 0.5, 32]} />
+
+        {/* Bottle Neck */}
+        <mesh position={[0, 1.45, 0]}>
+          <cylinderGeometry args={[0.18, 0.18, 0.6, 32]} />
           <meshPhysicalMaterial
-            color="#EAC06C"
-            transmission={0.88}
+            color="#FFF4DE"
+            transmission={0.9}
             transparent
-            roughness={0.12}
-            ior={1.48}
+            roughness={0.08}
+            ior={1.52}
           />
         </mesh>
-        {/* Foil Seal / Cork Cap */}
-        <mesh position={[0, 1.85, 0]}>
-          <cylinderGeometry args={[0.2, 0.2, 0.18, 32]} />
-          <meshStandardMaterial color="#C4883A" metalness={0.7} roughness={0.3} />
+
+        {/* Gold Metallic Neck Capsule & Cork Seal */}
+        <mesh position={[0, 1.68, 0]}>
+          <cylinderGeometry args={[0.19, 0.19, 0.35, 32]} />
+          <meshStandardMaterial
+            color="#D4AF37"
+            metalness={0.85}
+            roughness={0.25}
+          />
         </mesh>
       </group>
     </Float>
   );
 }
 
-// 3. Procedural Stemmed Crystal Wine Glass
-function WineGlass({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
-  const meshRef = useRef<THREE.Group>(null);
+// 3. Realistic Ziel Grit Mechanics Soap (Charcoal/Volcanic Pumice with Kraft Sleeve)
+function RealisticGritSoap({ position, scale = 1, rotationSpeed = 0.35 }: { position: [number, number, number]; scale?: number; rotationSpeed?: number }) {
+  const groupRef = useRef<THREE.Group>(null);
 
   useFrame((_, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y -= delta * 0.3;
-      meshRef.current.rotation.x += delta * 0.15;
+    if (groupRef.current) {
+      groupRef.current.rotation.x += delta * rotationSpeed;
+      groupRef.current.rotation.y += delta * (rotationSpeed * 0.8);
     }
   });
 
   return (
-    <Float speed={2.2} rotationIntensity={1.4} floatIntensity={2}>
-      <group ref={meshRef} position={position} scale={scale}>
-        {/* Base Foot */}
+    <Float speed={1.7} rotationIntensity={1.4} floatIntensity={1.6}>
+      <group ref={groupRef} position={position} scale={scale}>
+        {/* Dark Charcoal / Pumice Cold-Process Soap Bar */}
+        <mesh>
+          <boxGeometry args={[1.5, 0.95, 0.6]} />
+          <meshStandardMaterial
+            color="#32312E" // Deep volcanic charcoal tone
+            roughness={0.88}
+            metalness={0.05}
+          />
+        </mesh>
+
+        {/* Kraft Paperboard Sleeve Band Wrapped Around Midsection */}
+        <mesh position={[0, 0, 0]}>
+          <boxGeometry args={[0.85, 0.98, 0.63]} />
+          <meshStandardMaterial
+            color="#C8AD7F" // Warm earthy craft paperboard
+            roughness={0.8}
+            metalness={0.02}
+          />
+        </mesh>
+
+        {/* Ziel Brand Stamp Plate on Kraft Paper */}
+        <mesh position={[0, 0, 0.32]}>
+          <planeGeometry args={[0.7, 0.45]} />
+          <meshStandardMaterial
+            color="#1C1B1A"
+            roughness={0.9}
+          />
+        </mesh>
+      </group>
+    </Float>
+  );
+}
+
+// 4. Botanical Ivory Cold-Process Soap (Virgin Coconut Oils & Lipids)
+function RealisticBotanicalSoap({ position, scale = 1, rotationSpeed = 0.3 }: { position: [number, number, number]; scale?: number; rotationSpeed?: number }) {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame((_, delta) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y -= delta * rotationSpeed;
+      groupRef.current.rotation.z += delta * (rotationSpeed * 0.6);
+    }
+  });
+
+  return (
+    <Float speed={1.9} rotationIntensity={1.2} floatIntensity={1.7}>
+      <group ref={groupRef} position={position} scale={scale}>
+        {/* Creamy Raw Coconut Soap Slab */}
+        <mesh>
+          <boxGeometry args={[1.4, 0.9, 0.55]} />
+          <meshStandardMaterial
+            color="#EDE6D4" // Warm unbleached coconut nectar & lye cure
+            roughness={0.65}
+            metalness={0.02}
+          />
+        </mesh>
+        {/* Debossed Stamped Monogram Center */}
+        <mesh position={[0, 0, 0.28]}>
+          <planeGeometry args={[0.9, 0.4]} />
+          <meshStandardMaterial
+            color="#DDD3BC"
+            roughness={0.75}
+          />
+        </mesh>
+      </group>
+    </Float>
+  );
+}
+
+// 5. Realistic Stemmed Crystal Wine Glass with Wine Inside
+function RealisticWineGlass({ position, scale = 1, rotationSpeed = 0.3 }: { position: [number, number, number]; scale?: number; rotationSpeed?: number }) {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame((_, delta) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y -= delta * rotationSpeed;
+      groupRef.current.rotation.x += delta * (rotationSpeed * 0.4);
+    }
+  });
+
+  return (
+    <Float speed={2.1} rotationIntensity={1.2} floatIntensity={1.9}>
+      <group ref={groupRef} position={position} scale={scale}>
+        {/* Base Plate Foot */}
         <mesh position={[0, -1.2, 0]}>
-          <cylinderGeometry args={[0.55, 0.55, 0.05, 32]} />
+          <cylinderGeometry args={[0.52, 0.52, 0.04, 32]} />
           <meshPhysicalMaterial
             color="#FFFFFF"
             transmission={0.92}
             transparent
-            roughness={0.08}
-            ior={1.5}
+            roughness={0.06}
+            ior={1.52}
             clearcoat={1}
           />
         </mesh>
-        {/* Thin Stem */}
+
+        {/* Elegant Slender Stem */}
         <mesh position={[0, -0.55, 0]}>
-          <cylinderGeometry args={[0.05, 0.05, 1.25, 16]} />
+          <cylinderGeometry args={[0.04, 0.04, 1.25, 16]} />
           <meshPhysicalMaterial
             color="#FFFFFF"
             transmission={0.92}
             transparent
-            roughness={0.08}
-            ior={1.5}
+            roughness={0.06}
+            ior={1.52}
           />
         </mesh>
-        {/* Bowl */}
-        <mesh position={[0, 0.45, 0]} scale={[1, 1.3, 1]}>
-          <sphereGeometry args={[0.65, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.65]} />
+
+        {/* Crystal Bowl */}
+        <mesh position={[0, 0.35, 0]} scale={[1, 1.3, 1]}>
+          <sphereGeometry args={[0.62, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.65]} />
           <meshPhysicalMaterial
-            color="#FFF4DE"
+            color="#FFFFFF"
             transmission={0.94}
             transparent
-            roughness={0.05}
+            roughness={0.04}
             ior={1.52}
             reflectivity={0.8}
             clearcoat={1}
             side={THREE.DoubleSide}
           />
         </mesh>
-      </group>
-    </Float>
-  );
-}
 
-// 4. Procedural Cold-Process Handcrafted Soap Bar (Ziel Grit & Botanical Bars)
-function SoapBar({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
-  const meshRef = useRef<THREE.Group>(null);
-
-  useFrame((_, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.x += delta * 0.25;
-      meshRef.current.rotation.y += delta * 0.35;
-    }
-  });
-
-  return (
-    <Float speed={1.6} rotationIntensity={1.3} floatIntensity={1.7}>
-      <group ref={meshRef} position={position} scale={scale}>
-        {/* Main Soap Block */}
-        <mesh>
-          <boxGeometry args={[1.5, 0.95, 0.6]} />
+        {/* Coconut Wine Poured Inside Bowl */}
+        <mesh position={[0, 0.25, 0]} scale={[0.88, 0.85, 0.88]}>
+          <sphereGeometry args={[0.55, 32, 16, 0, Math.PI * 2, Math.PI * 0.3, Math.PI * 0.35]} />
           <meshStandardMaterial
-            color="#E5DCB8" // Raw cold-process coconut oil & oat ivory tone
-            roughness={0.65}
-            metalness={0.02}
-          />
-        </mesh>
-        {/* Embossed Brand Texture Plate */}
-        <mesh position={[0, 0, 0.31]}>
-          <planeGeometry args={[1.1, 0.55]} />
-          <meshStandardMaterial
-            color="#D8CEAA"
-            roughness={0.8}
+            color="#E5A638"
+            roughness={0.15}
           />
         </mesh>
       </group>
@@ -198,32 +284,31 @@ function SoapBar({ position, scale = 1 }: { position: [number, number, number]; 
   );
 }
 
-// Main 3D Floating Showcase
+// 3D Scene Controller
 function FloatingProductStage({ scrollProgress }: { scrollProgress: number }) {
   const groupRef = useRef<THREE.Group>(null);
 
   useFrame((state) => {
     if (!groupRef.current) return;
-    // Moves forward through the camera path as the user scrolls
-    groupRef.current.position.z = scrollProgress * 11;
+    groupRef.current.position.z = scrollProgress * 11.5;
     groupRef.current.rotation.y = state.pointer.x * 0.12;
     groupRef.current.rotation.x = -state.pointer.y * 0.12;
   });
 
   return (
     <group ref={groupRef}>
-      {/* Chapter 1: The Raw Coconut & Soap Foundation */}
-      <KingCoconut position={[-2.4, 0.7, -1]} scale={1.15} />
-      <SoapBar position={[2.4, -0.6, -2.5]} scale={1.2} />
+      {/* Chapter 1: The Raw King Coconut & Charcoal Grit Soap */}
+      <RealisticKingCoconut position={[-2.3, 0.6, -1]} scale={1.2} />
+      <RealisticGritSoap position={[2.4, -0.7, -2.5]} scale={1.25} />
 
-      {/* Chapter 2: The Artisanal Cellar Glass & Reserve Bottle */}
-      <WineBottle position={[-1.9, -1.2, -6]} scale={1.1} />
-      <WineGlass position={[2.1, 1.1, -7.5]} scale={1.25} />
+      {/* Chapter 2: The Fermented Wine Bottle & Crystal Glass */}
+      <RealisticWineBottle position={[-2.0, -1.0, -6]} scale={1.15} />
+      <RealisticWineGlass position={[2.2, 0.9, -7.5]} scale={1.25} />
 
-      {/* Chapter 3: Climax Product Symphony */}
-      <KingCoconut position={[2.3, -1.0, -10.5]} scale={0.9} />
-      <WineBottle position={[0, 0.2, -11.5]} scale={1.25} />
-      <SoapBar position={[-2.2, 1.4, -12]} scale={1.0} />
+      {/* Chapter 3: Climax Product Showcase (Wine, Botanical Bar, Golden Coconut) */}
+      <RealisticBotanicalSoap position={[-2.1, 1.2, -10.5]} scale={1.1} />
+      <RealisticWineBottle position={[0, 0.1, -11.5]} scale={1.3} />
+      <RealisticKingCoconut position={[2.2, -1.1, -12]} scale={1.05} />
     </group>
   );
 }
@@ -277,18 +362,18 @@ export default function LuxuryStoryHero({ onExplore }: { onExplore: () => void }
       {/* 3D WebGL Canvas with High Ambient Brightness */}
       <div className="absolute inset-0 z-0">
         <Canvas camera={{ position: [0, 0, 5], fov: 45 }}>
-          <ambientLight intensity={2.4} />
-          <directionalLight position={[10, 15, 10]} intensity={2.8} color="#FFFBF0" />
-          <directionalLight position={[-10, 10, -5]} intensity={1.5} color="#FFE6B0" />
-          <pointLight position={[0, -2, 2]} intensity={1.2} color="#FFF8E7" />
+          <ambientLight intensity={2.6} />
+          <directionalLight position={[10, 15, 10]} intensity={3.0} color="#FFFBF0" />
+          <directionalLight position={[-10, 10, -5]} intensity={1.8} color="#FFE6B0" />
+          <pointLight position={[0, -2, 2]} intensity={1.5} color="#FFF8E7" />
           <FloatingProductStage scrollProgress={scrollProgress} />
         </Canvas>
       </div>
 
-      {/* Soft Ambient Vignette */}
+      {/* Soft Vignette Overlay */}
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-[#FAF9F5]/30 via-transparent to-[#FAF9F5] z-10" />
 
-      {/* Main Luxury Typography (Phase subtitles removed) */}
+      {/* Main Luxury Typography */}
       <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none px-6 text-center">
         {activeChapter === 1 && (
           <div className="max-w-3xl transition-all duration-700 ease-out transform translate-y-0 opacity-100">
