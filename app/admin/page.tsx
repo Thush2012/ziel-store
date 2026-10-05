@@ -72,6 +72,7 @@ export default function AdminDashboard() {
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
   const [inputEmail, setInputEmail] = useState('');
+  const [inputPassword, setInputPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -127,56 +128,81 @@ export default function AdminDashboard() {
     setTimeout(() => showNotificationMessage(null), 3500);
   };
 
+  // Cryptographic Supabase Auth Verification
   useEffect(() => {
-    const savedAdmin = localStorage.getItem('ziel_admin_authorized');
-    if (savedAdmin === 'true') {
-      setIsAuthorized(true);
-      setCurrentUserEmail(AUTHORIZED_ADMIN_EMAIL);
-      return;
-    }
-
-    async function checkCurrentSession() {
+    async function verifySession() {
       const { data: { session } } = await supabase.auth.getSession();
       const email = session?.user?.email;
 
       if (session && email && email.toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
         setCurrentUserEmail(email);
         setIsAuthorized(true);
-        localStorage.setItem('ziel_admin_authorized', 'true');
       } else {
         setIsAuthorized(false);
       }
     }
 
-    checkCurrentSession();
+    verifySession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const email = session?.user?.email;
+      if (session && email && email.toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+        setCurrentUserEmail(email);
+        setIsAuthorized(true);
+      } else {
+        setCurrentUserEmail(null);
+        setIsAuthorized(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const handleSecretAuth = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
     setAuthLoading(true);
 
-    const entered = inputEmail.trim().toLowerCase();
+    try {
+      const emailClean = inputEmail.trim().toLowerCase();
 
-    if (entered === AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
-      setIsAuthorized(true);
-      setCurrentUserEmail(AUTHORIZED_ADMIN_EMAIL);
-      localStorage.setItem('ziel_admin_authorized', 'true');
-      showNotice('Admin verification successful!');
-    } else {
-      setAuthError('Authentication failed: Invalid credentials.');
-      setIsAuthorized(false);
+      if (emailClean !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+        setAuthError('Access Denied: This account is not registered as an authorized store administrator.');
+        setAuthLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: emailClean,
+        password: inputPassword,
+      });
+
+      if (error) {
+        setAuthError(error.message);
+        setIsAuthorized(false);
+      } else if (data.session && data.user?.email?.toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+        setIsAuthorized(true);
+        setCurrentUserEmail(data.user.email);
+        setInputPassword('');
+        showNotice('Secure administrator authentication verified!');
+      } else {
+        await supabase.auth.signOut();
+        setAuthError('Unauthorized session.');
+        setIsAuthorized(false);
+      }
+    } catch (err: any) {
+      setAuthError(err.message || 'Authentication error');
+    } finally {
+      setAuthLoading(false);
     }
-
-    setAuthLoading(false);
   };
 
   const handleAdminLogout = async () => {
-    localStorage.removeItem('ziel_admin_authorized');
     await supabase.auth.signOut();
     setIsAuthorized(false);
     setCurrentUserEmail(null);
     setInputEmail('');
+    setInputPassword('');
     showNotice('Logged out of admin portal');
   };
 
@@ -233,7 +259,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Supabase Realtime Listener on public:orders
   useEffect(() => {
     if (!isAuthorized) return;
 
@@ -585,6 +610,7 @@ export default function AdminDashboard() {
     );
   }
 
+  // Strict Login Gate
   if (!isAuthorized) {
     return (
       <main className="min-h-screen bg-[#121212] flex flex-col items-center justify-center p-6 text-[#F3F2EE] font-mono">
@@ -603,30 +629,43 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          <form onSubmit={handleSecretAuth} className="space-y-4">
+          <form onSubmit={handleAdminLogin} className="space-y-4">
             <div>
               <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
-                Security Identifier
+                Admin Email Address
               </label>
               <input
-                type="password"
+                type="email"
                 required
-                autoComplete="off"
-                placeholder="Enter authorized credential..."
+                placeholder="admin@zielstore.com"
                 value={inputEmail}
                 onChange={(e) => setInputEmail(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-stone-700 bg-stone-900 text-white text-xs tracking-wider focus:outline-none focus:border-amber-500 transition-colors"
               />
             </div>
 
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                required
+                placeholder="••••••••••••"
+                value={inputPassword}
+                onChange={(e) => setInputPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-stone-700 bg-stone-900 text-white text-xs tracking-wider focus:outline-none focus:border-amber-500 transition-colors"
+              />
+            </div>
+
             <button
               type="submit"
-              disabled={authLoading || !inputEmail.trim()}
+              disabled={authLoading || !inputEmail.trim() || !inputPassword.trim()}
               className={`w-full py-3.5 rounded-xl text-xs uppercase tracking-widest font-bold bg-amber-500 text-stone-950 hover:bg-amber-400 transition-colors ${
-                authLoading || !inputEmail.trim() ? 'opacity-50 cursor-not-allowed' : ''
+                authLoading || !inputEmail.trim() || !inputPassword.trim() ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
-              {authLoading ? 'Verifying...' : 'ACCESS DASHBOARD'}
+              {authLoading ? 'Verifying Session...' : 'AUTHENTICATE & ACCESS'}
             </button>
           </form>
 
@@ -1400,7 +1439,7 @@ export default function AdminDashboard() {
                       className="text-[10px] px-2.5 py-1 rounded-md uppercase font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors"
                       title="Edit Product Details & Image"
                     >
-                      ✏️️ Edit
+                      ✏ Edit
                     </button>
 
                     <button

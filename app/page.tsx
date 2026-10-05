@@ -803,7 +803,7 @@ export default function Home() {
     }
   };
 
-  // Dynamic Theme Colors
+  // Dynamic Theme Styling
   const bgMain = isDarkMode ? 'bg-[#141413] text-[#F0EFEA]' : 'bg-[#FAF9F5] text-[#1C1B1A]';
   const headerBg = isDarkMode ? 'bg-[#141413]/85 border-stone-800' : 'bg-[#FAF9F5]/90 border-[#E8E4DC]';
   const subBannerBg = isDarkMode ? 'bg-stone-900 border-stone-800 text-stone-400' : 'bg-[#F2EFE9] border-[#E8E4DC] text-[#78716A]';
@@ -816,7 +816,7 @@ export default function Home() {
 
   return (
     <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
-      {/* 3D Interactive Scrollytelling Entrance Hero */}
+      {/* 3D Pencil-Drawn Organic Story Entrance */}
       <LuxuryStoryHero onExplore={scrollToCatalog} />
 
       <div id="catalog-start" />
@@ -833,7 +833,7 @@ export default function Home() {
         Batch No. 04 Now Available • Worldwide Air Export & Islandwide Delivery
       </div>
 
-      {/* Store Header */}
+      {/* Store Header with Day / Night Theme Button */}
       <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3.5 flex items-center justify-between gap-2 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-colors duration-300`}>
         <div className="flex items-center space-x-2 shrink-0">
           <img
@@ -856,7 +856,7 @@ export default function Home() {
         </nav>
 
         <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-          {/* Day & Night Theme Selection Button */}
+          {/* Day & Night Mode Switch */}
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             title="Toggle Light / Dark Mode"
