@@ -803,7 +803,7 @@ export default function Home() {
     }
   };
 
-  // Dynamic Theme Styling
+  // Dynamic Light / Dark Color Variables
   const bgMain = isDarkMode ? 'bg-[#141413] text-[#F0EFEA]' : 'bg-[#FAF9F5] text-[#1C1B1A]';
   const headerBg = isDarkMode ? 'bg-[#141413]/85 border-stone-800' : 'bg-[#FAF9F5]/90 border-[#E8E4DC]';
   const subBannerBg = isDarkMode ? 'bg-stone-900 border-stone-800 text-stone-400' : 'bg-[#F2EFE9] border-[#E8E4DC] text-[#78716A]';
@@ -828,12 +828,12 @@ export default function Home() {
         </div>
       )}
 
-      {/* Top Banner */}
+      {/* Top Notice Banner */}
       <div className={`py-2 px-4 text-center text-[10px] uppercase font-mono tracking-widest border-b ${subBannerBg}`}>
         Batch No. 04 Now Available • Worldwide Air Export & Islandwide Delivery
       </div>
 
-      {/* Store Header with Day / Night Theme Button */}
+      {/* Store Header with Day / Night Theme Toggle */}
       <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3.5 flex items-center justify-between gap-2 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-colors duration-300`}>
         <div className="flex items-center space-x-2 shrink-0">
           <img
@@ -856,7 +856,7 @@ export default function Home() {
         </nav>
 
         <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-          {/* Day & Night Mode Switch */}
+          {/* Day & Night Theme Selection Button */}
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             title="Toggle Light / Dark Mode"
@@ -930,7 +930,7 @@ export default function Home() {
         </h2>
       </section>
 
-      {/* Catalog Filter Controls */}
+      {/* Catalog Filters */}
       <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pb-8 sm:pb-10">
         <div className={`flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b pb-6 ${isDarkMode ? 'border-stone-800' : 'border-[#E8E4DC]'}`}>
           <div className="flex flex-wrap items-center gap-2">
@@ -1005,7 +1005,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Product Grid */}
+      {/* Product Catalog Cards */}
       <section className="px-6 sm:px-12 max-w-7xl mx-auto pb-24">
         {filteredProducts.length === 0 ? (
           <div className="py-20 text-center">
@@ -1083,7 +1083,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* Behind The Brand Section */}
+      {/* Craftsmanship Section */}
       <section id="about" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${sectionAltBg}`}>
         <div className="max-w-7xl mx-auto">
           <p className={`text-xs uppercase tracking-[0.25em] font-semibold mb-3 ${isDarkMode ? 'text-stone-500' : 'text-[#8C827A]'}`}>
@@ -1156,7 +1156,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Contact Section */}
+      {/* Direct Inquiries & Contact Section */}
       <section id="contact" className={`py-16 sm:py-20 px-6 sm:px-12 border-t ${isDarkMode ? 'border-stone-800' : 'border-[#E8E4DC]'}`}>
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
           <div>
@@ -1389,7 +1389,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Slide-in Shopping Bag */}
+      {/* Cart Drawer */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end">
           <div className="fixed inset-0" onClick={() => setIsCartOpen(false)} />
@@ -1488,7 +1488,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* User Order History Modal */}
+      {/* Past Orders Modal */}
       {isOrdersOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
@@ -1546,7 +1546,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Authentication Modal */}
+      {/* Auth Modal */}
       {isAuthOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1899,6 +1899,7 @@ export default function Home() {
                     </select>
                   </div>
 
+                  {/* Hatton National Bank Transfer Details */}
                   {shippingForm.paymentMethod === 'bank' && (
                     <div className={`p-4 rounded-2xl border text-xs font-mono space-y-3 ${
                       isDarkMode
@@ -1909,11 +1910,10 @@ export default function Home() {
                         Bank Account Information
                       </div>
                       <div className="space-y-1 text-[11px] text-[#78716A]">
-                        <div><strong className="text-current">Bank:</strong> Commercial Bank of Ceylon</div>
-                        <div><strong className="text-current">Branch:</strong> Katunayake Branch</div>
-                        <div><strong className="text-current">Account Name:</strong> ZIEL STORE PVT LTD</div>
-                        <div><strong className="text-current">Account Number:</strong> 8009234821</div>
-                        <div><strong className="text-current">SWIFT / BIC:</strong> CCEYLKLX (International)</div>
+                        <div><strong className="text-current">Bank:</strong> Hatton National Bank (HNB)</div>
+                        <div><strong className="text-current">Branch:</strong> Katunayake</div>
+                        <div><strong className="text-current">Account Name:</strong> M.A.T.M Meththasinghe</div>
+                        <div><strong className="text-current">Account Number:</strong> 049020323384</div>
                       </div>
                       <div className="pt-2 border-t border-stone-200/20">
                         <label className="block text-[10px] uppercase font-bold tracking-wider mb-1.5 text-current">
