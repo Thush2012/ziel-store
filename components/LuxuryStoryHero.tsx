@@ -1,379 +1,386 @@
 'use client';
 
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Float } from '@react-three/drei';
+import { OrbitControls, Float, Center } from '@react-three/drei';
 import * as THREE from 'three';
 
-// --- Custom Pencil Drawing Hatching Shader ---
-const PencilShader = {
+// ---------------------------------------------------------------------------
+// 1. Procedural Stipple & Ink Pen-Hatching GLSL Shader
+// Matches the hand-drawn copperplate / lithograph engraving illustration style
+// ---------------------------------------------------------------------------
+const PencilArtShaderMaterial = {
   uniforms: {
-    paperColor: { value: new THREE.Color('#FAF7F0') }, // Warm vintage sketch paper
-    pencilColor: { value: new THREE.Color('#3A3734') }, // Fine graphite charcoal
-    lightPos: { value: new THREE.Vector3(5, 10, 7) },
+    uLightPos: { value: new THREE.Vector3(3.0, 5.0, 4.0) },
+    uInkColor: { value: new THREE.Color('#1F1B18') },
+    uPaperColor: { value: new THREE.Color('#FAF7F0') },
+    uHatchDensity: { value: 36.0 },
   },
   vertexShader: `
     varying vec3 vNormal;
     varying vec3 vWorldPosition;
     varying vec2 vUv;
+
     void main() {
-      vNormal = normalize(normalMatrix * normal);
-      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-      vWorldPosition = worldPosition.xyz;
       vUv = uv;
-      gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      vNormal = normalize(normalMatrix * normal);
+      vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      vWorldPosition = worldPos.xyz;
+      gl_Position = projectionMatrix * viewMatrix * worldPos;
     }
   `,
   fragmentShader: `
-    uniform vec3 paperColor;
-    uniform vec3 pencilColor;
-    uniform vec3 lightPos;
+    uniform vec3 uLightPos;
+    uniform vec3 uInkColor;
+    uniform vec3 uPaperColor;
+    uniform float uHatchDensity;
+
     varying vec3 vNormal;
     varying vec3 vWorldPosition;
     varying vec2 vUv;
 
     void main() {
-      vec3 lightDir = normalize(lightPos - vWorldPosition);
-      float diff = max(dot(vNormal, lightDir), 0.0);
-      
-      // Pencil Cross-hatch screen lines simulation
-      vec2 coord = gl_FragCoord.xy * 0.35;
-      float hatch1 = mod(coord.x + coord.y, 4.0);
-      float hatch2 = mod(coord.x - coord.y, 4.0);
-      
-      float shade = 1.0;
-      
-      // Shadow tone hatching thresholds
-      if (diff < 0.75) {
-        if (hatch1 < 1.3) shade -= 0.28;
+      vec3 lightDir = normalize(uLightPos - vWorldPosition);
+      float nDotL = dot(vNormal, lightDir);
+      float intensity = clamp(nDotL, 0.0, 1.0);
+
+      // Procedural cross-hatch screen coordinates
+      vec2 hatchCoord = (vUv * uHatchDensity);
+      float line1 = abs(fract(hatchCoord.x + hatchCoord.y) - 0.5);
+      float line2 = abs(fract(hatchCoord.x - hatchCoord.y) - 0.5);
+      float line3 = abs(fract(hatchCoord.y * 1.5) - 0.5);
+
+      float ink = 0.0;
+
+      // Deep shadow: triple dense cross-hatch & stippling
+      if (intensity < 0.22) {
+        if (line1 < 0.22 || line2 < 0.22 || line3 < 0.22) ink = 1.0;
       }
-      if (diff < 0.45) {
-        if (hatch2 < 1.3) shade -= 0.32;
+      // Mid tones: double cross-hatch
+      else if (intensity < 0.55) {
+        if (line1 < 0.16 || line2 < 0.16) ink = 1.0;
       }
-      if (diff < 0.2) {
-        if (hatch1 < 2.0 || hatch2 < 2.0) shade -= 0.35;
+      // Light shadow: single hatch line
+      else if (intensity < 0.85) {
+        if (line1 < 0.12) ink = 1.0;
       }
-      
-      // Rim outline sketch edge
-      vec3 viewDir = normalize(-vWorldPosition);
-      float rim = 1.0 - max(dot(viewDir, vNormal), 0.0);
+
+      // Paper tone with pencil graphite stroke color
+      vec3 finalColor = mix(uPaperColor, uInkColor, ink);
+
+      // Fine contour edge rim darkening
+      float rim = 1.0 - max(dot(normalize(-vWorldPosition), vNormal), 0.0);
       if (rim > 0.78) {
-        shade -= 0.6;
+        finalColor = mix(finalColor, uInkColor, 0.85);
       }
-      
-      vec3 finalColor = mix(pencilColor, paperColor, clamp(shade, 0.0, 1.0));
+
       gl_FragColor = vec4(finalColor, 1.0);
     }
   `,
 };
 
-function usePencilMaterial() {
-  return useMemo(() => {
-    return new THREE.ShaderMaterial({
-      uniforms: THREE.UniformsUtils.clone(PencilShader.uniforms),
-      vertexShader: PencilShader.vertexShader,
-      fragmentShader: PencilShader.fragmentShader,
-    });
-  }, []);
-}
+// ---------------------------------------------------------------------------
+// 2. Exact 3D Models Matching the Sketch Silhouettes
+// ---------------------------------------------------------------------------
 
-// 1. Handcrafted Ceylon King Coconut (Thambili triangular silhouette + stem calyx)
-function DrawnKingCoconut({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const pencilMat = usePencilMaterial();
-
-  useFrame((_, delta) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y += delta * 0.35;
-      groupRef.current.rotation.x += delta * 0.15;
-    }
-  });
-
+// A. Product 1: Oak Cask Aged Vinegar (Apothecary Flask)
+function VinegarFlaskModel({ material }: { material: THREE.ShaderMaterial }) {
   return (
-    <Float speed={1.8} rotationIntensity={1.2} floatIntensity={1.5}>
-      <group ref={groupRef} position={position} scale={scale}>
-        {/* Tapered triangular husk body */}
-        <mesh position={[0, -0.1, 0]} material={pencilMat} scale={[1, 1.38, 1]}>
-          <coneGeometry args={[0.9, 1.9, 18]} />
-        </mesh>
-        <mesh position={[0, -1.05, 0]} material={pencilMat} scale={[1, 0.65, 1]}>
-          <sphereGeometry args={[0.9, 20, 20]} />
-        </mesh>
-        {/* Husk Crown / Calyx */}
-        <mesh position={[0, 0.9, 0]} material={pencilMat}>
-          <cylinderGeometry args={[0.35, 0.15, 0.25, 12]} />
-        </mesh>
-        {/* Cut Organic Stem */}
-        <mesh position={[0, 1.12, 0]} rotation={[0.2, 0, 0.1]} material={pencilMat}>
-          <cylinderGeometry args={[0.07, 0.09, 0.35, 8]} />
-        </mesh>
-      </group>
-    </Float>
-  );
-}
-
-// 2. Realistic 750ml Wine Bottle (Bordeaux shape: punt base, cylindrical body, curve shoulder, capsule)
-function DrawnWineBottle({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const pencilMat = usePencilMaterial();
-
-  useFrame((_, delta) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y += delta * 0.3;
-      groupRef.current.rotation.z += delta * 0.12;
-    }
-  });
-
-  return (
-    <Float speed={1.6} rotationIntensity={0.9} floatIntensity={1.4}>
-      <group ref={groupRef} position={position} scale={scale}>
-        {/* Main Bottle Cylinder */}
-        <mesh position={[0, -0.2, 0]} material={pencilMat}>
-          <cylinderGeometry args={[0.55, 0.55, 1.9, 28]} />
-        </mesh>
-        {/* Inset Label Ring (Shading accent) */}
-        <mesh position={[0, -0.2, 0]} material={pencilMat} scale={[1.01, 0.9, 1.01]}>
-          <cylinderGeometry args={[0.55, 0.55, 1.2, 28]} />
-        </mesh>
-        {/* Tapered Shoulder */}
-        <mesh position={[0, 1.05, 0]} material={pencilMat}>
-          <cylinderGeometry args={[0.22, 0.55, 0.6, 28]} />
-        </mesh>
-        {/* Neck */}
-        <mesh position={[0, 1.6, 0]} material={pencilMat}>
-          <cylinderGeometry args={[0.18, 0.2, 0.55, 24]} />
-        </mesh>
-        {/* Neck Flange Lip & Foil Capsule */}
-        <mesh position={[0, 1.9, 0]} material={pencilMat}>
-          <cylinderGeometry args={[0.22, 0.22, 0.15, 24]} />
-        </mesh>
-      </group>
-    </Float>
-  );
-}
-
-// 3. Tulip Crystal Wine Glass
-function DrawnWineGlass({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const pencilMat = usePencilMaterial();
-
-  useFrame((_, delta) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y -= delta * 0.28;
-      groupRef.current.rotation.x += delta * 0.12;
-    }
-  });
-
-  return (
-    <Float speed={2.0} rotationIntensity={1.2} floatIntensity={1.7}>
-      <group ref={groupRef} position={position} scale={scale}>
-        {/* Flat Glass Foot */}
-        <mesh position={[0, -1.25, 0]} material={pencilMat}>
-          <cylinderGeometry args={[0.52, 0.52, 0.04, 24]} />
-        </mesh>
-        {/* Drawn Stem */}
-        <mesh position={[0, -0.6, 0]} material={pencilMat}>
-          <cylinderGeometry args={[0.045, 0.045, 1.3, 16]} />
-        </mesh>
-        {/* Tulip Bowl Base */}
-        <mesh position={[0, 0.25, 0]} material={pencilMat} scale={[1, 1.2, 1]}>
-          <sphereGeometry args={[0.62, 24, 24, 0, Math.PI * 2, 0, Math.PI * 0.62]} />
-        </mesh>
-        {/* Rim */}
-        <mesh position={[0, 0.72, 0]} material={pencilMat}>
-          <torusGeometry args={[0.42, 0.02, 12, 28]} />
-        </mesh>
-      </group>
-    </Float>
-  );
-}
-
-// 4. Ziel Grit Handcrafted Soap Bar
-function DrawnSoapBar({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const pencilMat = usePencilMaterial();
-
-  useFrame((_, delta) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.x += delta * 0.25;
-      groupRef.current.rotation.y += delta * 0.32;
-    }
-  });
-
-  return (
-    <Float speed={1.5} rotationIntensity={1.1} floatIntensity={1.5}>
-      <group ref={groupRef} position={position} scale={scale}>
-        {/* Beveled Soap Block */}
-        <mesh material={pencilMat}>
-          <boxGeometry args={[1.5, 0.95, 0.58]} />
-        </mesh>
-        {/* Top Debossed Stamp Inset */}
-        <mesh position={[0, 0, 0.3]} material={pencilMat}>
-          <boxGeometry args={[1.1, 0.6, 0.04]} />
-        </mesh>
-      </group>
-    </Float>
-  );
-}
-
-// Main 3D Pencil Scene
-function PencilArtifactScene({ scrollProgress }: { scrollProgress: number }) {
-  const masterGroup = useRef<THREE.Group>(null);
-
-  useFrame((state) => {
-    if (!masterGroup.current) return;
-    masterGroup.current.position.z = scrollProgress * 11;
-    masterGroup.current.rotation.y = state.pointer.x * 0.12;
-    masterGroup.current.rotation.x = -state.pointer.y * 0.12;
-  });
-
-  return (
-    <group ref={masterGroup}>
-      {/* Chapter 1: The Raw Coconut & Crafted Soap */}
-      <DrawnKingCoconut position={[-2.3, 0.6, -1]} scale={1.2} />
-      <DrawnSoapBar position={[2.3, -0.6, -2.4]} scale={1.25} />
-
-      {/* Chapter 2: The Cellar Wine Bottle & Stemware */}
-      <DrawnWineBottle position={[-1.9, -1.1, -6]} scale={1.15} />
-      <DrawnWineGlass position={[2.1, 1.0, -7.5]} scale={1.25} />
-
-      {/* Chapter 3: Climax Product Showcase */}
-      <DrawnKingCoconut position={[2.4, -0.9, -10.5]} scale={0.95} />
-      <DrawnWineBottle position={[0, 0.2, -11.5]} scale={1.3} />
-      <DrawnSoapBar position={[-2.3, 1.3, -12]} scale={1.05} />
+    <group position={[0, -0.4, 0]}>
+      {/* Flattened flask body */}
+      <mesh material={material} position={[0, 0, 0]} castShadow>
+        <boxGeometry args={[1.5, 2.0, 0.75]} />
+      </mesh>
+      {/* Tapered shoulder transition */}
+      <mesh material={material} position={[0, 1.15, 0]}>
+        <cylinderGeometry args={[0.35, 0.75, 0.35, 32]} />
+      </mesh>
+      {/* Neck */}
+      <mesh material={material} position={[0, 1.5, 0]}>
+        <cylinderGeometry args={[0.26, 0.28, 0.55, 32]} />
+      </mesh>
+      {/* Cork cap collar */}
+      <mesh material={material} position={[0, 1.85, 0]}>
+        <cylinderGeometry args={[0.3, 0.3, 0.2, 32]} />
+      </mesh>
     </group>
   );
 }
 
-export default function LuxuryStoryHero({ onExplore }: { onExplore: () => void }) {
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const [isAutoScrolling, setIsAutoScrolling] = useState(true);
+// B. Product 2: Spiced King Coconut Liqueur (Heavy Base + Neck Seal Tag)
+function SpicedLiqueurModel({ material }: { material: THREE.ShaderMaterial }) {
+  return (
+    <group position={[0, -0.5, 0]}>
+      {/* Stout cylindrical body */}
+      <mesh material={material} position={[0, 0.1, 0]}>
+        <cylinderGeometry args={[0.85, 0.85, 2.0, 32]} />
+      </mesh>
+      {/* Rounded shoulder */}
+      <mesh material={material} position={[0, 1.25, 0]}>
+        <sphereGeometry args={[0.85, 32, 16, 0, Math.PI * 2, 0, Math.PI / 3]} />
+      </mesh>
+      {/* Neck */}
+      <mesh material={material} position={[0, 1.6, 0]}>
+        <cylinderGeometry args={[0.36, 0.36, 0.8, 32]} />
+      </mesh>
+      {/* Wrapped cord seal collar */}
+      <mesh material={material} position={[0, 1.7, 0]}>
+        <torusGeometry args={[0.38, 0.06, 16, 32]} />
+      </mesh>
+      {/* Wax seal emblem */}
+      <mesh material={material} position={[0, 1.85, 0.36]} rotation={[0, 0, 0]}>
+        <cylinderGeometry args={[0.18, 0.18, 0.05, 24]} />
+      </mesh>
+      {/* Hanging reserve tag */}
+      <mesh material={material} position={[0.42, 1.45, 0.2]} rotation={[0.2, 0.3, -0.4]}>
+        <boxGeometry args={[0.45, 0.22, 0.02]} />
+      </mesh>
+    </group>
+  );
+}
 
-  useEffect(() => {
-    let animationFrameId: number;
-    let lastTime = performance.now();
-    const scrollSpeed = 0.00035;
+// C. Product 3: Dry Sparkling Wine (Champagne Silhouette + Wire Cork Cage)
+function SparklingWineModel({ material }: { material: THREE.ShaderMaterial }) {
+  return (
+    <group position={[0, -0.6, 0]}>
+      {/* Lower tapered body */}
+      <mesh material={material} position={[0, 0.1, 0]}>
+        <cylinderGeometry args={[0.8, 0.72, 1.9, 32]} />
+      </mesh>
+      {/* Sloping champagne shoulders */}
+      <mesh material={material} position={[0, 1.35, 0]}>
+        <cylinderGeometry args={[0.28, 0.8, 1.0, 32]} />
+      </mesh>
+      {/* Slender neck */}
+      <mesh material={material} position={[0, 2.05, 0]}>
+        <cylinderGeometry args={[0.24, 0.26, 0.75, 32]} />
+      </mesh>
+      {/* Champagne bulge cork & foil cage */}
+      <mesh material={material} position={[0, 2.5, 0]}>
+        <cylinderGeometry args={[0.28, 0.25, 0.35, 32]} />
+      </mesh>
+      <mesh material={material} position={[0, 2.7, 0]}>
+        <sphereGeometry args={[0.26, 32, 16]} />
+      </mesh>
+    </group>
+  );
+}
 
-    const tick = (currentTime: number) => {
-      const delta = currentTime - lastTime;
-      lastTime = currentTime;
+// D. Product 4: Botanical Soap Box (Angular Cutout Reveal)
+function SoapBoxModel({ material }: { material: THREE.ShaderMaterial }) {
+  return (
+    <group position={[0, 0, 0]}>
+      {/* Main outer carton */}
+      <mesh material={material} position={[0, 0, 0]}>
+        <boxGeometry args={[2.4, 1.5, 0.85]} />
+      </mesh>
+      {/* Angled top cutout exposing soap texture bar */}
+      <mesh material={material} position={[0.65, 0.45, 0.05]} rotation={[0, 0, 0.08]}>
+        <boxGeometry args={[0.9, 0.5, 0.76]} />
+      </mesh>
+    </group>
+  );
+}
 
-      if (isAutoScrolling) {
-        setScrollProgress((prev) => {
-          const next = prev + scrollSpeed * (delta / 16);
-          if (next >= 1) {
-            setIsAutoScrolling(false);
-            return 1;
-          }
-          return next;
-        });
-      }
+// E. Product 5: Reserve King Coconut Wine (Tall Slender Bordeaux Silhouette)
+function ClassicWineModel({ material }: { material: THREE.ShaderMaterial }) {
+  return (
+    <group position={[0, -0.7, 0]}>
+      {/* Base & main cylinder */}
+      <mesh material={material} position={[0, 0.2, 0]}>
+        <cylinderGeometry args={[0.68, 0.68, 2.3, 32]} />
+      </mesh>
+      {/* High curved Bordeaux shoulder */}
+      <mesh material={material} position={[0, 1.6, 0]}>
+        <cylinderGeometry args={[0.25, 0.68, 0.7, 32]} />
+      </mesh>
+      {/* Long neck */}
+      <mesh material={material} position={[0, 2.3, 0]}>
+        <cylinderGeometry args={[0.22, 0.24, 1.0, 32]} />
+      </mesh>
+      {/* Capsule top finish */}
+      <mesh material={material} position={[0, 2.85, 0]}>
+        <cylinderGeometry args={[0.25, 0.23, 0.2, 32]} />
+      </mesh>
+    </group>
+  );
+}
 
-      animationFrameId = requestAnimationFrame(tick);
-    };
+// ---------------------------------------------------------------------------
+// 3. Rotating 3D Scene Controller
+// ---------------------------------------------------------------------------
+function SceneDisplay({ activeIndex }: { activeIndex: number }) {
+  const groupRef = useRef<THREE.Group>(null);
 
-    animationFrameId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [isAutoScrolling]);
+  const shaderMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: THREE.UniformsUtils.clone(PencilArtShaderMaterial.uniforms),
+      vertexShader: PencilArtShaderMaterial.vertexShader,
+      fragmentShader: PencilArtShaderMaterial.fragmentShader,
+    });
+  }, []);
 
-  const handleWheel = (e: React.WheelEvent) => {
-    setIsAutoScrolling(false);
-    setScrollProgress((prev) => Math.min(1, Math.max(0, prev + e.deltaY * 0.0008)));
-  };
-
-  const activeChapter = scrollProgress < 0.33 ? 1 : scrollProgress < 0.66 ? 2 : 3;
+  useFrame((state, delta) => {
+    if (groupRef.current) {
+      // Gentle turntable rotation + organic breathing float
+      groupRef.current.rotation.y += delta * 0.45;
+      groupRef.current.position.y = Math.sin(state.clock.elapsedTime * 1.5) * 0.08;
+    }
+  });
 
   return (
-    <div
-      onWheel={handleWheel}
-      className="relative w-full h-screen overflow-hidden bg-[#FAF7F0] select-none text-[#23201D]"
-    >
-      {/* 3D WebGL Canvas Layer */}
-      <div className="absolute inset-0 z-0">
-        <Canvas camera={{ position: [0, 0, 5], fov: 45 }}>
-          <ambientLight intensity={1.5} />
-          <directionalLight position={[6, 12, 8]} intensity={2.0} />
-          <PencilArtifactScene scrollProgress={scrollProgress} />
-        </Canvas>
-      </div>
+    <group ref={groupRef}>
+      <Center>
+        {activeIndex === 0 && <VinegarFlaskModel material={shaderMaterial} />}
+        {activeIndex === 1 && <SpicedLiqueurModel material={shaderMaterial} />}
+        {activeIndex === 2 && <SparklingWineModel material={shaderMaterial} />}
+        {activeIndex === 3 && <SoapBoxModel material={shaderMaterial} />}
+        {activeIndex === 4 && <ClassicWineModel material={shaderMaterial} />}
+      </Center>
+    </group>
+  );
+}
 
-      {/* Subtle Fine Paper Texture Grain Vignette */}
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(#2b2723_0.5px,transparent_0.5px)] [background-size:24px_24px] opacity-[0.06] z-10" />
+// ---------------------------------------------------------------------------
+// 4. Main Export Hero Component
+// ---------------------------------------------------------------------------
+interface LuxuryStoryHeroProps {
+  onExplore: () => void;
+}
 
-      {/* Narrative Typography */}
-      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none px-6 text-center">
-        {activeChapter === 1 && (
-          <div className="max-w-3xl transition-all duration-700 ease-out transform translate-y-0 opacity-100">
-            <h1 className="text-4xl sm:text-7xl font-light tracking-tight text-[#23201D] leading-[1.08]">
-              Born from the earth, <br />
-              <span className="italic font-serif text-[#B87B2E]">sculpted by hand.</span>
-            </h1>
-            <p className="mt-5 text-xs sm:text-sm font-sans text-[#7A736B] max-w-lg mx-auto leading-relaxed">
-              Every creation begins with pure King Coconut nectar and volcanic stone extracts sourced exclusively from Sri Lanka.
-            </p>
-          </div>
-        )}
+const PRODUCT_STORIES = [
+  {
+    title: 'Oak Cask Aged King Coconut Vinegar',
+    subtitle: 'Culinary Edition • Double-Fermented • Aged 12 Months',
+    abv: '5.2% Acidity',
+    desc: 'Slow fermented naturally from pure king coconut nectar and aged in toasted oak barrels for rich, mellow acidity and savory complexity.',
+  },
+  {
+    title: 'Spiced King Coconut Liqueur Reserve',
+    subtitle: 'Batch No. 04 • Single Estate Ceylon Spices',
+    abv: '15.0% ABV',
+    desc: 'Artisanal nectar infused with whole Ceylon cinnamon, pods of wild vanilla, and warm botanicals. Finished with hand-knotted neck twine and wax stamp.',
+  },
+  {
+    title: 'Dry Sparkling King Coconut Wine',
+    subtitle: 'Brut Edition • Naturally Effervescent',
+    abv: '11.1% ABV',
+    desc: 'Crafted with zero added sugars. Lively, champagne-grade bubbles paired with crisp tropical floral notes harvested fresh from coastal groves.',
+  },
+  {
+    title: 'Ziel Facial Bars & Botanical Boxes',
+    subtitle: 'Cold-Process Formulation • Natural Clays & Lipids',
+    abv: '115g Net Bar',
+    desc: 'Activated charcoal, pink volcanic clay, and coconut milk crafted into dense exfoliating bars, housed in custom tear-away paper packaging.',
+  },
+  {
+    title: 'Ziel King Coconut Wine (Original)',
+    subtitle: 'Signature Vintage • Slow Fermentation',
+    abv: '12.5% ABV',
+    desc: 'Our original flagship vintage. Smooth notes of toasted caramel, balanced fruit tannins, and a clean, refreshing golden finish.',
+  },
+];
 
-        {activeChapter === 2 && (
-          <div className="max-w-3xl transition-all duration-700 ease-out transform translate-y-0 opacity-100">
-            <h1 className="text-4xl sm:text-7xl font-light tracking-tight text-[#23201D] leading-[1.08]">
-              Where organic chemistry <br />
-              <span className="italic font-serif text-[#B87B2E]">meets quiet patience.</span>
-            </h1>
-            <p className="mt-5 text-xs sm:text-sm font-sans text-[#7A736B] max-w-lg mx-auto leading-relaxed">
-              Zero synthetic speed-ups. Cold-process cures and oak-cask maturation running at their own unhurried pace.
-            </p>
-          </div>
-        )}
+export default function LuxuryStoryHero({ onExplore }: LuxuryStoryHeroProps) {
+  const [activeIdx, setActiveIdx] = useState(0);
 
-        {activeChapter === 3 && (
-          <div className="max-w-3xl transition-all duration-700 ease-out transform translate-y-0 opacity-100">
-            <h1 className="text-4xl sm:text-7xl font-light tracking-tight text-[#23201D] leading-[1.08]">
-              Distinctive works, <br />
-              <span className="italic font-serif text-[#B87B2E]">ready for your hands.</span>
-            </h1>
-            <div className="mt-8 pointer-events-auto">
-              <button
-                onClick={onExplore}
-                className="px-8 py-4 rounded-full bg-[#23201D] text-[#FAF7F0] text-xs uppercase tracking-widest font-bold hover:bg-[#B87B2E] transition-all duration-300 shadow-xl"
-              >
-                Enter Official Store →
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+  return (
+    <section className="relative w-full min-h-[90vh] flex flex-col lg:flex-row items-center justify-between px-6 sm:px-14 py-12 bg-[#FAF7F0] dark:bg-[#141413] border-b border-[#E8E4DC] dark:border-stone-800 transition-colors duration-500 overflow-hidden">
+      {/* Background Lithograph Watermark Effect */}
+      <div className="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.02] bg-[radial-gradient(#1c1b1a_1px,transparent_1px)] [background-size:16px_16px]" />
 
-      {/* Floating Bottom Controller Pill */}
-      <div className="absolute bottom-8 inset-x-0 z-30 flex justify-center pointer-events-auto px-4">
-        <div className="bg-[#FFFFFF]/90 backdrop-blur-md border border-[#E5E0D5] px-5 py-2.5 rounded-full shadow-md flex items-center space-x-5 font-mono text-[10px] tracking-wider text-[#4A453F]">
-          <button
-            onClick={() => setIsAutoScrolling(!isAutoScrolling)}
-            className="flex items-center space-x-1.5 font-bold uppercase hover:text-[#B87B2E] transition-colors"
-          >
-            <span>{isAutoScrolling ? '❚❚' : '▶'}</span>
-            <span>{isAutoScrolling ? 'Pause' : 'Auto Play'}</span>
-          </button>
-
-          <div className="w-28 sm:w-44 h-1.5 bg-[#EAE5D9] rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[#B87B2E] transition-all duration-150 rounded-full"
-              style={{ width: `${Math.round(scrollProgress * 100)}%` }}
-            />
-          </div>
-
-          <span className="text-[#877F76] w-8 text-right font-medium">
-            {Math.round(scrollProgress * 100)}%
+      {/* Left: Interactive Story Context */}
+      <div className="w-full lg:w-1/2 z-10 flex flex-col justify-center pr-0 lg:pr-10 mb-8 lg:mb-0">
+        <div className="flex items-center space-x-2 mb-3">
+          <span className="h-[1px] w-8 bg-[#C4883A]" />
+          <span className="text-[11px] uppercase tracking-[0.25em] font-mono font-semibold text-[#C4883A]">
+            Pen Art & 3D Hatching Engine
           </span>
+        </div>
 
+        <h1 className="text-3xl sm:text-5xl lg:text-6xl font-light tracking-tight text-[#1C1B1A] dark:text-[#F3F2EE] leading-[1.1] transition-all">
+          {PRODUCT_STORIES[activeIdx].title}
+        </h1>
+
+        <p className="mt-2 text-xs sm:text-sm font-mono text-[#8C827A] dark:text-stone-400">
+          {PRODUCT_STORIES[activeIdx].subtitle} •{' '}
+          <span className="text-[#C4883A] font-bold">{PRODUCT_STORIES[activeIdx].abv}</span>
+        </p>
+
+        <p className="mt-5 text-xs sm:text-sm leading-relaxed text-[#524B45] dark:text-stone-300 max-w-lg">
+          {PRODUCT_STORIES[activeIdx].desc}
+        </p>
+
+        {/* Product Silhouette Selector Carousel */}
+        <div className="mt-8 pt-6 border-t border-[#E8E4DC] dark:border-stone-800">
+          <div className="text-[10px] font-mono uppercase tracking-wider text-[#8C827A] mb-3">
+            Select 3D Botanical Shape:
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              '1. Oak Vinegar Flask',
+              '2. Spiced Liqueur',
+              '3. Brut Sparkling',
+              '4. Soap Reveal Box',
+              '5. Signature Wine',
+            ].map((name, idx) => (
+              <button
+                key={idx}
+                onClick={() => setActiveIdx(idx)}
+                className={`text-[11px] font-mono px-3.5 py-1.5 rounded-full border transition-all ${
+                  activeIdx === idx
+                    ? 'bg-[#1C1B1A] text-[#FAF9F5] border-[#1C1B1A] dark:bg-stone-100 dark:text-stone-900 font-bold scale-105 shadow-sm'
+                    : 'bg-[#EFECE6] dark:bg-stone-800/80 text-[#524B45] dark:text-stone-300 border-[#D9D4C7] dark:border-stone-700 hover:border-[#1C1B1A]'
+                }`}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-8 flex items-center space-x-4">
           <button
             onClick={onExplore}
-            className="font-bold text-[#23201D] uppercase hover:underline ml-2 hidden sm:inline"
+            className="px-6 py-3 rounded-xl bg-[#1C1B1A] hover:bg-[#C4883A] text-[#FAF9F5] dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-amber-400 text-xs uppercase font-mono tracking-widest font-semibold transition-all shadow-md"
           >
-            Skip to Works ↓
+            Explore Full Catalog ↓
           </button>
+          <span className="text-[10px] font-mono text-[#8C827A]">
+            Drag 3D model to inspect • Auto-rotating
+          </span>
         </div>
       </div>
-    </div>
+
+      {/* Right: 3D Pencil Art Hatching Canvas */}
+      <div className="w-full lg:w-1/2 h-[380px] sm:h-[480px] lg:h-[560px] relative flex items-center justify-center">
+        <div className="absolute inset-0 rounded-3xl border border-[#E8E4DC] dark:border-stone-800 bg-[#F4F1EA]/60 dark:bg-stone-900/40 backdrop-blur-sm overflow-hidden shadow-xl">
+          {/* Subtle watermark stamp */}
+          <div className="absolute top-4 right-4 text-[9px] font-mono uppercase tracking-widest text-[#8C827A] border border-[#D9D4C7] dark:border-stone-800 px-2.5 py-1 rounded-md z-10 bg-white/40 dark:bg-stone-900/40">
+            Artisanal Pen Shader • 3D WebGL
+          </div>
+
+          <Canvas
+            shadows
+            camera={{ position: [0, 0, 5.0], fov: 42 }}
+            className="cursor-grab active:cursor-grabbing w-full h-full"
+          >
+            <ambientLight intensity={0.4} />
+            <directionalLight position={[3, 5, 4]} intensity={1.5} castShadow />
+
+            <Float speed={2} rotationIntensity={0.3} floatIntensity={0.4}>
+              <SceneDisplay activeIndex={activeIdx} />
+            </Float>
+
+            <OrbitControls
+              enableZoom={false}
+              enablePan={false}
+              minPolarAngle={Math.PI / 3}
+              maxPolarAngle={Math.PI / 1.7}
+            />
+          </Canvas>
+        </div>
+      </div>
+    </section>
   );
 }
