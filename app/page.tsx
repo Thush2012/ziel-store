@@ -96,7 +96,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Ziel King Coconut Wine',
     category: 'Wines',
     price: 32.0,
-    stockQty: 4,
+    stockQty: 4, // Shows "Only 4 left"
     tagline: 'Batch No. 04 — Artisanal Fermentation',
     description:
       'Slow-fermented naturally from fresh king coconut nectar. Features rich floral aromatics, subtle caramel warmth, and a smooth, balanced crisp finish. Best served chilled.',
@@ -117,7 +117,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Ziel Grit Heavy Duty Soap',
     category: 'Soaps',
     price: 14.0,
-    stockQty: 22,
+    stockQty: 25, // Above 5 -> Hidden
     tagline: 'Mechanics Formula — Grease & Oil Removal',
     description:
       'Specially formulated cold-process soap designed to lift tough industrial grease, engine oil, rust, and dirt without drying out skin. Infused with natural exfoliants and pumice.',
@@ -138,7 +138,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Botanical Cold-Process Soap',
     category: 'Soaps',
     price: 10.0,
-    stockQty: 3,
+    stockQty: 3, // Shows "Only 3 left"
     tagline: 'Natural Oils & Hydrating Lipids',
     description:
       'Handcrafted moisturizing soap made with virgin coconut oil, essential botanical extracts, and rich nourishing lipids for gentle daily skin cleansing.',
@@ -158,7 +158,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Reserve Coconut Vintage Wine',
     category: 'Wines',
     price: 48.0,
-    stockQty: 2,
+    stockQty: 2, // Shows "Only 2 left"
     tagline: 'Aged 12 Months — Limited Edition',
     description:
       'A premium limited-edition reserve vintage aged in oak casks for 12 months. Delivers complex notes of toasted coconut, vanilla, and oak undertones.',
@@ -178,7 +178,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Industrial Hand Cleanser Bar',
     category: 'Soaps',
     price: 12.0,
-    stockQty: 18,
+    stockQty: 40, // Above 5 -> Hidden
     tagline: 'Exfoliating Pumice & Citrus Oil',
     description:
       'Heavy-duty exfoliating bar infused with organic orange peel oils and fine volcanic pumice. Effortlessly dissolves inks, paints, and heavy grime.',
@@ -197,7 +197,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Ziel Store Signature Gift Set',
     category: 'Sets',
     price: 65.0,
-    stockQty: 5,
+    stockQty: 18, // Above 5 -> Hidden
     tagline: 'Artisanal Wine & Cleanser Duo',
     description:
       'Our flagship signature bundle featuring 1 bottle of Batch No. 04 King Coconut Wine alongside 2 bars of handcrafted Ziel soaps in custom gift packaging.',
@@ -274,6 +274,7 @@ export default function Home() {
   });
   const [slipFile, setSlipFile] = useState<File | null>(null);
   const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
+  const [copiedBank, setCopiedBank] = useState(false);
 
   const [couponInput, setCouponInput] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
@@ -339,15 +340,15 @@ export default function Home() {
             name: item.name,
             category: item.category || 'Wines',
             price: Number(item.price),
-            stockQty: Number(item.stock_qty ?? 10),
+            stockQty: item.stock_qty ?? 10,
             tagline: item.tagline || '',
             description: item.description || '',
-            isAvailable: item.is_available,
+            isAvailable: (item.stock_qty ?? 10) > 0 && item.is_available,
             image: item.image_url || '/images/wine.jpg',
             aspect: 'aspect-[4/5]',
             colorBgLight: 'bg-[#EFECE6]',
             colorBgDark: 'bg-[#22211F]',
-            specs: [{ label: 'Stock', value: `${item.stock_qty || 0} units` }],
+            specs: [],
           }));
           setProducts(mapped);
         }
@@ -448,6 +449,10 @@ export default function Home() {
   };
 
   const addToCart = (product: Product, qtyToAdd: number = 1) => {
+    if (product.stockQty <= 0) {
+      showNotification(`${product.name} is out of stock.`);
+      return;
+    }
     setCart((prevCart) => {
       const existing = prevCart.find((item) => item.id === product.id);
       if (existing) {
@@ -616,6 +621,12 @@ export default function Home() {
   const handleContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setContactSubmitted(true);
+  };
+
+  const copyBankDetails = () => {
+    navigator.clipboard.writeText('049020323384');
+    setCopiedBank(true);
+    setTimeout(() => setCopiedBank(false), 2000);
   };
 
   const totalCartItems = cart.reduce((acc, item) => acc + item.qty, 0);
@@ -811,7 +822,7 @@ export default function Home() {
     }
   };
 
-  // Dynamic Theme Colors
+  // Dynamic Light / Dark Color Variables
   const bgMain = isDarkMode ? 'bg-[#141413] text-[#F0EFEA]' : 'bg-[#FAF9F5] text-[#1C1B1A]';
   const headerBg = isDarkMode ? 'bg-[#141413]/85 border-stone-800' : 'bg-[#FAF9F5]/90 border-[#E8E4DC]';
   const subBannerBg = isDarkMode ? 'bg-stone-900 border-stone-800 text-stone-400' : 'bg-[#F2EFE9] border-[#E8E4DC] text-[#78716A]';
@@ -824,7 +835,7 @@ export default function Home() {
 
   return (
     <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
-      {/* 3D Scrollytelling Hero */}
+      {/* 3D Story Entrance */}
       <LuxuryStoryHero onExplore={scrollToCatalog} />
 
       <div id="catalog-start" />
@@ -864,7 +875,7 @@ export default function Home() {
         </nav>
 
         <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-          {/* Day & Night Theme Toggle */}
+          {/* Day & Night Theme Button */}
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             title="Toggle Light / Dark Mode"
@@ -1013,7 +1024,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Product Grid with Automated Low-Stock Badges */}
+      {/* Product Catalog Cards */}
       <section className="px-6 sm:px-12 max-w-7xl mx-auto pb-24">
         {filteredProducts.length === 0 ? (
           <div className="py-20 text-center">
@@ -1028,8 +1039,8 @@ export default function Home() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-12">
             {filteredProducts.map((product) => {
-              const isLowStock = product.isAvailable && product.stockQty > 0 && product.stockQty <= 5;
-              const isSoldOut = !product.isAvailable || product.stockQty === 0;
+              const isLowStock = product.stockQty > 0 && product.stockQty < 5;
+              const isOutOfStock = product.stockQty <= 0;
 
               return (
                 <div
@@ -1038,10 +1049,8 @@ export default function Home() {
                   className="group flex flex-col justify-between cursor-pointer"
                 >
                   <div className={`relative w-full ${product.aspect} ${isDarkMode ? product.colorBgDark : 'bg-[#F4F1EA]'} rounded-3xl overflow-hidden border ${cardBorder} p-5 flex flex-col justify-between transition-all duration-500 group-hover:shadow-xl`}>
-                    
-                    {/* Top Row: Category + Scarcity / Price Badges */}
                     <div className="flex justify-between items-start z-10 w-full gap-2">
-                      <div className="flex flex-col items-start gap-1.5">
+                      <div className="flex flex-col gap-1.5 items-start">
                         <span className={`text-[10px] uppercase font-mono tracking-widest px-2.5 py-1 rounded-md backdrop-blur-sm border ${
                           isDarkMode
                             ? 'bg-stone-900/80 text-stone-400 border-stone-800'
@@ -1050,22 +1059,21 @@ export default function Home() {
                           {product.category}
                         </span>
 
-                        {/* Automated Low Stock Badge */}
+                        {/* Scarcity Low Stock Pill (Only shown when < 5) */}
                         {isLowStock && (
-                          <span className="text-[9px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-500 dark:text-amber-300 border border-amber-500/40 backdrop-blur-md flex items-center gap-1 animate-pulse">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
-                            Only {product.stockQty} left in batch
+                          <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded-md backdrop-blur-md bg-amber-500/20 text-amber-500 border border-amber-500/40 animate-pulse">
+                            Only {product.stockQty} left
                           </span>
                         )}
 
-                        {isSoldOut && (
-                          <span className="text-[9px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/40 backdrop-blur-md">
-                            Batch Sold Out
+                        {isOutOfStock && (
+                          <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded-md backdrop-blur-md bg-rose-500/20 text-rose-500 border border-rose-500/40">
+                            Sold Out
                           </span>
                         )}
                       </div>
 
-                      <span className={`text-xs font-mono font-medium px-2.5 py-1 rounded-md backdrop-blur-sm border shrink-0 ${
+                      <span className={`text-xs font-mono font-medium px-2.5 py-1 rounded-md backdrop-blur-sm border ${
                         isDarkMode
                           ? 'bg-stone-900/80 text-stone-300 border-stone-800'
                           : 'bg-[#FFFFFF]/90 text-[#1C1B1A] border-[#E8E4DC]'
@@ -1078,7 +1086,9 @@ export default function Home() {
                       <img
                         src={product.image}
                         alt={product.name}
-                        className="w-full h-full object-contain drop-shadow-md rounded-xl transition-transform duration-500 group-hover:scale-105"
+                        className={`w-full h-full object-contain drop-shadow-md rounded-xl transition-transform duration-500 group-hover:scale-105 ${
+                          isOutOfStock ? 'opacity-40 grayscale' : ''
+                        }`}
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                       />
                     </div>
@@ -1086,18 +1096,18 @@ export default function Home() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (!isSoldOut) addToCart(product, 1);
+                        if (!isOutOfStock) addToCart(product, 1);
                       }}
-                      disabled={isSoldOut}
+                      disabled={isOutOfStock}
                       className={`relative z-10 w-full text-xs uppercase tracking-widest py-3 rounded-xl font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 backdrop-blur-sm ${
-                        isSoldOut
-                          ? 'bg-stone-300 text-stone-500 cursor-not-allowed dark:bg-stone-800 dark:text-stone-600'
+                        isOutOfStock
+                          ? 'bg-stone-500/80 text-stone-300 cursor-not-allowed'
                           : isDarkMode
                           ? 'bg-stone-100/90 text-stone-900 hover:bg-white'
                           : 'bg-[#1C1B1A]/95 text-[#FAF9F5] hover:bg-[#C4883A]'
                       }`}
                     >
-                      {isSoldOut ? 'Sold Out' : 'Quick Add +'}
+                      {isOutOfStock ? 'Sold Out' : 'Quick Add +'}
                     </button>
                   </div>
 
@@ -1332,25 +1342,29 @@ export default function Home() {
 
             <div className="w-full md:w-1/2 p-6 sm:p-8 flex flex-col justify-between">
               <div>
-                <div className="flex flex-wrap items-center gap-2 mb-3">
+                <div className="flex items-center space-x-3 mb-3">
                   <span className={`text-[10px] uppercase font-mono tracking-widest px-2.5 py-1 rounded-md ${
                     isDarkMode ? 'bg-stone-800 text-stone-300' : 'bg-[#EAE5DB] text-[#524B45]'
                   }`}>
                     {activeProduct.category}
                   </span>
 
-                  <span className={`text-[10px] uppercase font-mono tracking-widest px-2.5 py-1 rounded-md ${
-                    activeProduct.isAvailable && activeProduct.stockQty > 0
-                      ? isDarkMode ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-emerald-100 text-emerald-800'
-                      : isDarkMode ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-rose-100 text-rose-800'
-                  }`}>
-                    {activeProduct.isAvailable && activeProduct.stockQty > 0 ? 'In Stock' : 'Sold Out'}
-                  </span>
-
-                  {/* Scarcity Notice inside Modal */}
-                  {activeProduct.isAvailable && activeProduct.stockQty > 0 && activeProduct.stockQty <= 5 && (
-                    <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-500 dark:text-amber-300 border border-amber-500/40">
-                      Only {activeProduct.stockQty} Remaining
+                  {/* Stock State Badge (Hides number unless < 5) */}
+                  {activeProduct.stockQty > 0 && activeProduct.stockQty < 5 ? (
+                    <span className="text-[10px] uppercase font-mono font-bold tracking-widest px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-500 border border-amber-500/40 animate-pulse">
+                      Low Stock • Only {activeProduct.stockQty} left
+                    </span>
+                  ) : activeProduct.stockQty > 0 ? (
+                    <span className={`text-[10px] uppercase font-mono tracking-widest px-2.5 py-1 rounded-md ${
+                      isDarkMode ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      In Stock
+                    </span>
+                  ) : (
+                    <span className={`text-[10px] uppercase font-mono tracking-widest px-2.5 py-1 rounded-md ${
+                      isDarkMode ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      Sold Out
                     </span>
                   )}
                 </div>
@@ -1386,55 +1400,61 @@ export default function Home() {
               </div>
 
               <div className={`mt-6 sm:mt-8 border-t pt-4 sm:pt-5 ${isDarkMode ? 'border-stone-800' : 'border-[#E8E4DC]'}`}>
-                <div className="flex items-center justify-between mb-4">
-                  <span className={`text-xs uppercase font-medium tracking-wider ${isDarkMode ? 'text-stone-400' : 'text-[#78716A]'}`}>
-                    Select Quantity
-                  </span>
+                {activeProduct.stockQty > 0 ? (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className={`text-xs uppercase font-medium tracking-wider ${isDarkMode ? 'text-stone-400' : 'text-[#78716A]'}`}>
+                        Select Quantity
+                      </span>
 
-                  <div className={`flex items-center space-x-3 border rounded-full px-3 py-1 shadow-sm ${
-                    isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-[#D9D4C7] bg-[#FFFFFF]'
-                  }`}>
-                    <button
-                      onClick={() => setModalQuantity((q) => Math.max(1, q - 1))}
-                      className="hover:opacity-60 text-sm font-bold w-5 h-5 flex items-center justify-center"
-                    >
-                      -
-                    </button>
-                    <span className="text-sm font-mono font-medium min-w-[20px] text-center">
-                      {modalQuantity}
-                    </span>
-                    <button
-                      onClick={() => setModalQuantity((q) => Math.min(activeProduct.stockQty || 99, q + 1))}
-                      className="hover:opacity-60 text-sm font-bold w-5 h-5 flex items-center justify-center"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
+                      <div className={`flex items-center space-x-3 border rounded-full px-3 py-1 shadow-sm ${
+                        isDarkMode ? 'border-stone-700 bg-stone-800' : 'border-[#D9D4C7] bg-[#FFFFFF]'
+                      }`}>
+                        <button
+                          onClick={() => setModalQuantity((q) => Math.max(1, q - 1))}
+                          className="hover:opacity-60 text-sm font-bold w-5 h-5 flex items-center justify-center"
+                        >
+                          -
+                        </button>
+                        <span className="text-sm font-mono font-medium min-w-[20px] text-center">
+                          {modalQuantity}
+                        </span>
+                        <button
+                          onClick={() => setModalQuantity((q) => Math.min(activeProduct.stockQty, q + 1))}
+                          className="hover:opacity-60 text-sm font-bold w-5 h-5 flex items-center justify-center"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
 
-                <button
-                  onClick={() => {
-                    addToCart(activeProduct, modalQuantity);
-                    handleCloseProduct();
-                  }}
-                  disabled={!activeProduct.isAvailable || activeProduct.stockQty === 0}
-                  className={`w-full py-3.5 sm:py-4 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
-                    activeProduct.isAvailable && activeProduct.stockQty > 0
-                      ? isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-[#1C1B1A] text-[#FAF9F5] hover:bg-[#C4883A]'
-                      : 'bg-[#D9D4C7] text-[#8C827A] cursor-not-allowed'
-                  }`}
-                >
-                  {activeProduct.isAvailable && activeProduct.stockQty > 0
-                    ? `Add To Bag • ${formatPrice(activeProduct.price * modalQuantity)}`
-                    : 'Out of Stock'}
-                </button>
+                    <button
+                      onClick={() => {
+                        addToCart(activeProduct, modalQuantity);
+                        handleCloseProduct();
+                      }}
+                      className={`w-full py-3.5 sm:py-4 rounded-xl text-xs uppercase tracking-widest font-semibold transition-all ${
+                        isDarkMode ? 'bg-stone-100 text-stone-900 hover:bg-white' : 'bg-[#1C1B1A] text-[#FAF9F5] hover:bg-[#C4883A]'
+                      }`}
+                    >
+                      Add To Bag • {formatPrice(activeProduct.price * modalQuantity)}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    disabled
+                    className="w-full py-3.5 sm:py-4 rounded-xl text-xs uppercase tracking-widest font-semibold bg-stone-700 text-stone-400 cursor-not-allowed"
+                  >
+                    Item Out of Stock
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Slide-in Shopping Bag */}
+      {/* Cart Drawer */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end">
           <div className="fixed inset-0" onClick={() => setIsCartOpen(false)} />
@@ -1533,7 +1553,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Orders History Modal */}
+      {/* Past Orders Modal */}
       {isOrdersOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
@@ -1591,7 +1611,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Authentication Modal */}
+      {/* Auth Modal */}
       {isAuthOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1944,7 +1964,7 @@ export default function Home() {
                     </select>
                   </div>
 
-                  {/* Hatton National Bank Transfer Details */}
+                  {/* Hatton National Bank Transfer Details with Copy Action */}
                   {shippingForm.paymentMethod === 'bank' && (
                     <div className={`p-4 rounded-2xl border text-xs font-mono space-y-3 ${
                       isDarkMode
@@ -1954,11 +1974,26 @@ export default function Home() {
                       <div className="font-bold text-[#C4883A] uppercase tracking-wider text-[11px]">
                         Bank Account Information
                       </div>
-                      <div className="space-y-1 text-[11px] text-[#78716A]">
+                      <div className="space-y-1.5 text-[11px] text-[#78716A]">
                         <div><strong className="text-current">Bank:</strong> Hatton National Bank (HNB)</div>
                         <div><strong className="text-current">Branch:</strong> Katunayake</div>
                         <div><strong className="text-current">Account Name:</strong> M.A.T.M Meththasinghe</div>
-                        <div><strong className="text-current">Account Number:</strong> 049020323384</div>
+                        <div className="flex items-center justify-between pt-0.5">
+                          <div>
+                            <strong className="text-current">Account Number:</strong> 049020323384
+                          </div>
+                          <button
+                            type="button"
+                            onClick={copyBankDetails}
+                            className={`text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded border transition-colors ${
+                              copiedBank
+                                ? 'bg-emerald-600 text-white border-emerald-500'
+                                : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700'
+                            }`}
+                          >
+                            {copiedBank ? '✓ Copied' : 'Copy'}
+                          </button>
+                        </div>
                       </div>
                       <div className="pt-2 border-t border-stone-200/20">
                         <label className="block text-[10px] uppercase font-bold tracking-wider mb-1.5 text-current">
