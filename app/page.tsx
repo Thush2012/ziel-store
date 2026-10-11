@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 import { generateInvoicePdf } from '../lib/generatePdf';
-import EditorialHero from '../components/EditorialHero';
 import BrandLogoIntro from '../components/BrandLogoIntro';
 
 interface Product {
@@ -293,13 +292,6 @@ export default function Home() {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     })}`;
-  };
-
-  const scrollToCatalog = () => {
-    const catalogElement = document.getElementById('catalog-start');
-    if (catalogElement) {
-      catalogElement.scrollIntoView({ behavior: 'smooth' });
-    }
   };
 
   useEffect(() => {
@@ -837,15 +829,10 @@ export default function Home() {
 
   return (
     <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
-      {/* 1. Kinetic Vector Intro Animation */}
+      {/* Animated Brand Logo & Typing Reveal */}
       {!introComplete && (
         <BrandLogoIntro onComplete={() => setIntroComplete(true)} />
       )}
-
-      {/* 2. Editorial Showcase Hero */}
-      <EditorialHero onExplore={scrollToCatalog} />
-
-      <div id="catalog-start" />
 
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#1C1B1A] text-[#FAF9F5] dark:bg-stone-100 dark:text-stone-900 px-4 py-3 rounded-2xl shadow-xl text-xs font-medium tracking-wide flex items-center space-x-2 animate-bounce">
@@ -882,7 +869,7 @@ export default function Home() {
         </nav>
 
         <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-          {/* Day / Night Theme Toggle */}
+          {/* Day / Night Mode Switch */}
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             title="Toggle Light / Dark Mode"
@@ -946,8 +933,8 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Catalog Filters */}
-      <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pt-12 pb-8 sm:pb-10">
+      {/* Catalog Filters & Products */}
+      <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pt-10 pb-8 sm:pb-10">
         <div className={`flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b pb-6 ${isDarkMode ? 'border-stone-800' : 'border-[#E8E4DC]'}`}>
           <div className="flex flex-wrap items-center gap-2">
             {CATEGORIES.map((cat) => (
