@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 import { generateInvoicePdf } from '../lib/generatePdf';
-import BrandReveal from '../components/BrandReveal';
-import BrandLogo from '../components/BrandLogo';
+import EditorialHero from '../components/EditorialHero';
+import BrandLogoIntro from '../components/BrandLogoIntro';
 
 interface Product {
   id: number;
@@ -232,6 +232,7 @@ const FAQS = [
 ];
 
 export default function Home() {
+  const [introComplete, setIntroComplete] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [currency, setCurrency] = useState<Currency>('USD');
@@ -292,6 +293,13 @@ export default function Home() {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     })}`;
+  };
+
+  const scrollToCatalog = () => {
+    const catalogElement = document.getElementById('catalog-start');
+    if (catalogElement) {
+      catalogElement.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   useEffect(() => {
@@ -816,7 +824,7 @@ export default function Home() {
     }
   };
 
-  // Dynamic Theme Colors
+  // Dynamic Theme Styling
   const bgMain = isDarkMode ? 'bg-[#141413] text-[#F0EFEA]' : 'bg-[#FAF9F5] text-[#1C1B1A]';
   const headerBg = isDarkMode ? 'bg-[#141413]/85 border-stone-800' : 'bg-[#FAF9F5]/90 border-[#E8E4DC]';
   const subBannerBg = isDarkMode ? 'bg-stone-900 border-stone-800 text-stone-400' : 'bg-[#F2EFE9] border-[#E8E4DC] text-[#78716A]';
@@ -829,8 +837,15 @@ export default function Home() {
 
   return (
     <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
-      {/* 1. Kinetic Brand Reveal Opening Entrance */}
-      <BrandReveal />
+      {/* 1. Kinetic Vector Intro Animation */}
+      {!introComplete && (
+        <BrandLogoIntro onComplete={() => setIntroComplete(true)} />
+      )}
+
+      {/* 2. Editorial Showcase Hero */}
+      <EditorialHero onExplore={scrollToCatalog} />
+
+      <div id="catalog-start" />
 
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#1C1B1A] text-[#FAF9F5] dark:bg-stone-100 dark:text-stone-900 px-4 py-3 rounded-2xl shadow-xl text-xs font-medium tracking-wide flex items-center space-x-2 animate-bounce">
@@ -839,15 +854,23 @@ export default function Home() {
         </div>
       )}
 
-      {/* Top Notice Banner */}
+      {/* Top Banner Notice */}
       <div className={`py-2 px-4 text-center text-[10px] uppercase font-mono tracking-widest border-b ${subBannerBg}`}>
         Batch No. 04 Now Available • Worldwide Air Export & Islandwide Delivery
       </div>
 
-      {/* Store Header with Integrated Vector Brand Monogram */}
+      {/* Store Header */}
       <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3.5 flex items-center justify-between gap-2 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-colors duration-300`}>
         <div className="flex items-center space-x-2 shrink-0">
-          <BrandLogo isDark={isDarkMode} />
+          <img
+            src="/logo.png"
+            alt="Ziel Store Logo"
+            className="h-6 sm:h-8 w-auto object-contain"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+          <span className="text-sm sm:text-lg font-bold tracking-[0.05em] uppercase whitespace-nowrap">
+            ZIEL<span className={`font-light ml-1 ${isDarkMode ? 'text-stone-500' : 'text-[#8C827A]'}`}>STORE</span>
+          </span>
         </div>
 
         <nav className={`hidden md:flex items-center space-x-10 text-xs font-medium uppercase tracking-widest ${isDarkMode ? 'text-stone-400' : 'text-[#78716A]'}`}>
@@ -859,7 +882,7 @@ export default function Home() {
         </nav>
 
         <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-          {/* Day & Night Mode Switch */}
+          {/* Day / Night Theme Toggle */}
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             title="Toggle Light / Dark Mode"
@@ -923,18 +946,8 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Hero Headline */}
-      <section className="px-6 sm:px-12 pt-16 sm:pt-24 pb-10 sm:pb-14 max-w-7xl mx-auto">
-        <p className={`text-[10px] sm:text-xs uppercase tracking-[0.25em] font-semibold mb-3 sm:mb-4 ${isDarkMode ? 'text-stone-500' : 'text-[#8C827A]'}`}>
-          Artisanal Fermentations & Handcrafted Formulations
-        </p>
-        <h1 className="text-3xl sm:text-6xl lg:text-7xl font-light tracking-[-0.03em] leading-[1.1] max-w-4xl">
-          Thoughtfully created products built with <span className={`italic font-normal ${isDarkMode ? 'text-amber-400' : 'text-[#C4883A]'}`}>precision & care.</span>
-        </h1>
-      </section>
-
       {/* Catalog Filters */}
-      <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pb-8 sm:pb-10">
+      <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pt-12 pb-8 sm:pb-10">
         <div className={`flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b pb-6 ${isDarkMode ? 'border-stone-800' : 'border-[#E8E4DC]'}`}>
           <div className="flex flex-wrap items-center gap-2">
             {CATEGORIES.map((cat) => (
@@ -1008,7 +1021,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Product Catalog Cards */}
+      {/* Catalog Cards Grid */}
       <section className="px-6 sm:px-12 max-w-7xl mx-auto pb-24">
         {filteredProducts.length === 0 ? (
           <div className="py-20 text-center">
