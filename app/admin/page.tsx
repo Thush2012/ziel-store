@@ -27,6 +27,7 @@ interface ProductItem {
   stock_qty: number;
   category: string;
   is_available: boolean;
+  image_url?: string;
   tagline?: string;
   description?: string;
   barcode?: string;
@@ -68,12 +69,14 @@ export default function AdminDashboard() {
   // Edit / Create Product Modal
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [productForm, setProductForm] = useState({
     id: 0,
     name: '',
     category: 'Wines',
     price: 25,
     stock_qty: 10,
+    image_url: '/hero-art/wine.png',
     tagline: '',
     description: '',
     barcode: '',
@@ -105,12 +108,11 @@ export default function AdminDashboard() {
     setKeyInput('');
   };
 
-  // Handheld Hardware Barcode Scanner Listener
+  // Hardware Barcode Scanner Listener
   useEffect(() => {
     if (!isAuthenticated) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is currently typing in an input or textarea
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
 
@@ -164,7 +166,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Barcode Match Handler
   const handleScannedCode = (code: string) => {
     const matched = products.find(
       (p) =>
@@ -181,7 +182,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Webcam QR / Barcode Scanner
   const toggleCameraScanner = async () => {
     if (scannerActive) {
       if (videoRef.current && videoRef.current.srcObject) {
@@ -214,7 +214,6 @@ export default function AdminDashboard() {
     return `$${usd.toFixed(2)}`;
   };
 
-  // Order Status Handler
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     setUpdatingId(orderId);
     try {
@@ -229,7 +228,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Stock Adjustment
   const handleStockAdjust = async (productId: number, newStock: number) => {
     setUpdatingId(productId);
     const validQty = Math.max(0, newStock);
@@ -245,7 +243,44 @@ export default function AdminDashboard() {
     }
   };
 
-  // Product Edit Modal Setup
+  // Image File Uploader to Supabase Storage
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    try {
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const fileName = `prod_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${fileExt}`;
+
+      // Upload to 'products' or 'receipts' public storage
+      const { data, error } = await supabase.storage
+        .from('products')
+        .upload(fileName, file, { cacheControl: '3600', upsert: true });
+
+      if (error) {
+        // Fallback to receipts bucket if products bucket is not yet configured
+        const fallback = await supabase.storage
+          .from('receipts')
+          .upload(fileName, file, { cacheControl: '3600', upsert: true });
+        
+        if (fallback.error) {
+          alert(`Image upload error: ${fallback.error.message}`);
+        } else {
+          const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(fileName);
+          setProductForm((prev) => ({ ...prev, image_url: urlData.publicUrl }));
+        }
+      } else if (data) {
+        const { data: urlData } = supabase.storage.from('products').getPublicUrl(fileName);
+        setProductForm((prev) => ({ ...prev, image_url: urlData.publicUrl }));
+      }
+    } catch (err: any) {
+      alert(`Upload failed: ${err?.message || 'Network issue'}`);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const openEditProduct = (p: ProductItem) => {
     setEditingProduct(p);
     setProductForm({
@@ -254,6 +289,7 @@ export default function AdminDashboard() {
       category: p.category,
       price: p.price,
       stock_qty: p.stock_qty,
+      image_url: p.image_url || '/hero-art/wine.png',
       tagline: p.tagline || '',
       description: p.description || '',
       barcode: p.barcode || '',
@@ -269,6 +305,7 @@ export default function AdminDashboard() {
       category: 'Wines',
       price: 20,
       stock_qty: 10,
+      image_url: '/hero-art/wine.png',
       tagline: '',
       description: '',
       barcode: '',
@@ -281,7 +318,6 @@ export default function AdminDashboard() {
     if (!productForm.name.trim()) return;
 
     if (editingProduct) {
-      // Update Existing
       const { error } = await supabase
         .from('products')
         .update({
@@ -289,6 +325,7 @@ export default function AdminDashboard() {
           category: productForm.category,
           price: Number(productForm.price),
           stock_qty: Number(productForm.stock_qty),
+          image_url: productForm.image_url,
           tagline: productForm.tagline,
           description: productForm.description,
           barcode: productForm.barcode || null,
@@ -300,9 +337,10 @@ export default function AdminDashboard() {
           prev.map((p) => (p.id === editingProduct.id ? { ...p, ...productForm } : p))
         );
         setIsProductModalOpen(false);
+      } else {
+        alert(`Update failed: ${error.message}`);
       }
     } else {
-      // Insert New Product
       const { data, error } = await supabase
         .from('products')
         .insert([
@@ -311,6 +349,7 @@ export default function AdminDashboard() {
             category: productForm.category,
             price: Number(productForm.price),
             stock_qty: Number(productForm.stock_qty),
+            image_url: productForm.image_url,
             tagline: productForm.tagline,
             description: productForm.description,
             barcode: productForm.barcode || null,
@@ -323,11 +362,12 @@ export default function AdminDashboard() {
       if (!error && data) {
         setProducts((prev) => [...prev, data]);
         setIsProductModalOpen(false);
+      } else {
+        alert(`Creation failed: ${error?.message || 'Check database schema'}`);
       }
     }
   };
 
-  // Toggle Visibility
   const handleToggleAvailable = async (productId: number, current: boolean) => {
     setUpdatingId(productId);
     const { error } = await supabase.from('products').update({ is_available: !current }).eq('id', productId);
@@ -338,7 +378,7 @@ export default function AdminDashboard() {
   };
 
   // ==============================================================
-  // 1. KEY GATE SCREEN (Shown if not unlocked)
+  // 1. KEY GATE SCREEN
   // ==============================================================
   if (!isAuthenticated) {
     return (
@@ -576,20 +616,31 @@ export default function AdminDashboard() {
                     }`}
                   >
                     <div>
-                      <div className="flex justify-between items-start gap-2">
-                        <div>
-                          <span className="text-[10px] font-mono uppercase tracking-wider text-[#C4883A] block">
-                            {prod.category}
-                          </span>
-                          <h3 className="font-bold text-base text-stone-100 mt-0.5">{prod.name}</h3>
-                          {prod.barcode && (
-                            <span className="text-[10px] font-mono text-stone-400 block mt-0.5">
-                              Barcode: {prod.barcode}
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="flex items-start space-x-3">
+                          {/* Product Image Thumbnail */}
+                          <div className="w-12 h-12 rounded-xl bg-stone-950 border border-stone-800 p-1 flex items-center justify-center shrink-0 overflow-hidden">
+                            <img
+                              src={prod.image_url || '/hero-art/wine.png'}
+                              alt={prod.name}
+                              className="w-full h-full object-contain"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-[#C4883A] block">
+                              {prod.category}
                             </span>
-                          )}
+                            <h3 className="font-bold text-base text-stone-100 mt-0.5">{prod.name}</h3>
+                            {prod.barcode && (
+                              <span className="text-[10px] font-mono text-stone-400 block mt-0.5">
+                                Barcode: {prod.barcode}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="flex items-center space-x-1.5">
+                        <div className="flex items-center space-x-1.5 shrink-0">
                           <button
                             onClick={() => openEditProduct(prod)}
                             className="text-[10px] font-mono uppercase px-2 py-0.5 rounded border border-stone-700 bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold"
@@ -616,7 +667,7 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    {/* Stock Intake Level */}
+                    {/* Stock Adjustment Controls */}
                     <div className="mt-6 pt-3 border-t border-stone-800 flex items-center justify-between">
                       <span className="text-xs font-mono text-stone-400">Stock Qty:</span>
                       <div className="flex items-center space-x-2">
@@ -761,7 +812,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* ============================================================== */}
-      {/* 3. PRODUCT CREATE / EDIT MODAL                                 */}
+      {/* 3. PRODUCT CREATE / EDIT MODAL WITH IMAGE UPLOAD & INPUT       */}
       {/* ============================================================== */}
       {isProductModalOpen && (
         <div
@@ -769,7 +820,7 @@ export default function AdminDashboard() {
           onClick={() => setIsProductModalOpen(false)}
         >
           <div
-            className="relative max-w-md w-full bg-stone-900 border border-stone-800 rounded-3xl p-6 shadow-2xl my-auto"
+            className="relative max-w-lg w-full bg-stone-900 border border-stone-800 rounded-3xl p-6 shadow-2xl my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-6">
@@ -785,6 +836,52 @@ export default function AdminDashboard() {
             </div>
 
             <form onSubmit={handleSaveProduct} className="space-y-4 font-mono text-xs">
+              {/* Product Image Upload Section */}
+              <div className="p-4 rounded-2xl border border-stone-800 bg-stone-950/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-stone-300 uppercase text-[10px] font-bold">
+                    Product Image *
+                  </label>
+                  {uploadingImage && (
+                    <span className="text-[10px] text-[#C4883A] animate-pulse">Uploading to storage...</span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-4">
+                  {/* Image Preview Box */}
+                  <div className="w-16 h-16 rounded-xl bg-stone-900 border border-stone-700 p-1 flex items-center justify-center overflow-hidden shrink-0">
+                    <img
+                      src={productForm.image_url || '/hero-art/wine.png'}
+                      alt="Preview"
+                      className="w-full h-full object-contain"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  </div>
+
+                  <div className="flex-1 space-y-2">
+                    {/* File Upload Input */}
+                    <div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageFileUpload}
+                        disabled={uploadingImage}
+                        className="w-full text-[10px] file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[10px] file:font-mono file:bg-[#C4883A] file:text-black file:font-bold file:cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Or Direct Image URL Field */}
+                    <input
+                      type="text"
+                      placeholder="Or enter image URL path (e.g. /hero-art/wine.png)"
+                      value={productForm.image_url}
+                      onChange={(e) => setProductForm({ ...productForm, image_url: e.target.value })}
+                      className="w-full px-3 py-1.5 rounded-lg border border-stone-700 bg-stone-900 text-stone-200 text-[11px] focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-stone-400 uppercase text-[10px] mb-1">Product Name *</label>
                 <input
@@ -864,7 +961,7 @@ export default function AdminDashboard() {
               <div>
                 <label className="block text-stone-400 uppercase text-[10px] mb-1">Description</label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder="Artisanal formulation details..."
                   value={productForm.description}
                   onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
@@ -874,7 +971,8 @@ export default function AdminDashboard() {
 
               <button
                 type="submit"
-                className="w-full py-3.5 mt-2 rounded-xl font-bold bg-[#C4883A] text-black hover:bg-[#d4994d] transition-colors uppercase tracking-widest text-xs"
+                disabled={uploadingImage}
+                className="w-full py-3.5 mt-2 rounded-xl font-bold bg-[#C4883A] text-black hover:bg-[#d4994d] transition-colors uppercase tracking-widest text-xs disabled:opacity-50"
               >
                 {editingProduct ? 'Save Product Changes' : 'Create Product'}
               </button>
