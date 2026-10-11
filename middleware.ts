@@ -1,25 +1,39 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(req: NextRequest) {
-  const url = req.nextUrl.clone();
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
 
-  // Protect /admin routes
-  if (url.pathname.startsWith('/admin')) {
-    // Check secure admin session cookie
-    const adminSession = req.cookies.get('ziel_admin_token')?.value;
-
-    // If accessing login endpoint or cookie is valid, pass through
-    if (!adminSession && !url.pathname.endsWith('/admin/login')) {
-      // You can redirect unauthorized users to the home page or a login gate
-      url.pathname = '/';
-      return NextResponse.redirect(url);
-    }
+  // 1. Never block or redirect admin routes
+  if (pathname.startsWith('/admin')) {
+    return NextResponse.next();
   }
 
+  // 2. Allow static files, assets, images, and API routes to pass through cleanly
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/hero-art') ||
+    pathname.startsWith('/hero-videos') ||
+    pathname.startsWith('/images') ||
+    pathname.includes('.')
+  ) {
+    return NextResponse.next();
+  }
+
+  // 3. Pass through all other normal routes
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: [
+    /*
+     * Match all request paths except for:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public files (svg, png, jpg, etc.)
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 };
