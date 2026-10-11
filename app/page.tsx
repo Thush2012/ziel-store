@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 import { generateInvoicePdf } from '../lib/generatePdf';
-import EditorialHero from '../components/EditorialHero';
 import BrandReveal from '../components/BrandReveal';
 import BrandLogo from '../components/BrandLogo';
 
@@ -98,7 +97,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Ziel King Coconut Wine',
     category: 'Wines',
     price: 32.0,
-    stockQty: 4, // Triggers "Only 4 left"
+    stockQty: 4,
     tagline: 'Batch No. 04 — Artisanal Fermentation',
     description:
       'Slow-fermented naturally from fresh king coconut nectar. Features rich floral aromatics, subtle caramel warmth, and a smooth, balanced crisp finish. Best served chilled.',
@@ -119,7 +118,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Ziel Grit Heavy Duty Soap',
     category: 'Soaps',
     price: 14.0,
-    stockQty: 25, // Above 5 -> Hidden
+    stockQty: 25,
     tagline: 'Mechanics Formula — Grease & Oil Removal',
     description:
       'Specially formulated cold-process soap designed to lift tough industrial grease, engine oil, rust, and dirt without drying out skin. Infused with natural exfoliants and pumice.',
@@ -140,7 +139,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Botanical Cold-Process Soap',
     category: 'Soaps',
     price: 10.0,
-    stockQty: 3, // Triggers "Only 3 left"
+    stockQty: 3,
     tagline: 'Natural Oils & Hydrating Lipids',
     description:
       'Handcrafted moisturizing soap made with virgin coconut oil, essential botanical extracts, and rich nourishing lipids for gentle daily skin cleansing.',
@@ -160,7 +159,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Reserve Coconut Vintage Wine',
     category: 'Wines',
     price: 48.0,
-    stockQty: 2, // Triggers "Only 2 left"
+    stockQty: 2,
     tagline: 'Aged 12 Months — Limited Edition',
     description:
       'A premium limited-edition reserve vintage aged in oak casks for 12 months. Delivers complex notes of toasted coconut, vanilla, and oak undertones.',
@@ -293,13 +292,6 @@ export default function Home() {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     })}`;
-  };
-
-  const scrollToCatalog = () => {
-    const catalogElement = document.getElementById('catalog-start');
-    if (catalogElement) {
-      catalogElement.scrollIntoView({ behavior: 'smooth' });
-    }
   };
 
   useEffect(() => {
@@ -824,7 +816,7 @@ export default function Home() {
     }
   };
 
-  // Dynamic Theme Palette Values
+  // Dynamic Theme Colors
   const bgMain = isDarkMode ? 'bg-[#141413] text-[#F0EFEA]' : 'bg-[#FAF9F5] text-[#1C1B1A]';
   const headerBg = isDarkMode ? 'bg-[#141413]/85 border-stone-800' : 'bg-[#FAF9F5]/90 border-[#E8E4DC]';
   const subBannerBg = isDarkMode ? 'bg-stone-900 border-stone-800 text-stone-400' : 'bg-[#F2EFE9] border-[#E8E4DC] text-[#78716A]';
@@ -837,13 +829,8 @@ export default function Home() {
 
   return (
     <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
-      {/* 1. Kinetic Brand Logo Opening Entrance */}
+      {/* 1. Kinetic Brand Reveal Opening Entrance */}
       <BrandReveal />
-
-      {/* 2. Bold Kinetic Editorial Product Showcase Deck */}
-      <EditorialHero onExplore={scrollToCatalog} />
-
-      <div id="catalog-start" />
 
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#1C1B1A] text-[#FAF9F5] dark:bg-stone-100 dark:text-stone-900 px-4 py-3 rounded-2xl shadow-xl text-xs font-medium tracking-wide flex items-center space-x-2 animate-bounce">
@@ -859,7 +846,6 @@ export default function Home() {
 
       {/* Store Header with Integrated Vector Brand Monogram */}
       <header className={`sticky top-0 z-30 ${headerBg} backdrop-blur-md border-b px-4 sm:px-12 py-3.5 flex items-center justify-between gap-2 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-colors duration-300`}>
-        {/* Brand Logo & Geometric Monogram */}
         <div className="flex items-center space-x-2 shrink-0">
           <BrandLogo isDark={isDarkMode} />
         </div>
@@ -937,8 +923,18 @@ export default function Home() {
         </div>
       </header>
 
+      {/* Hero Headline */}
+      <section className="px-6 sm:px-12 pt-16 sm:pt-24 pb-10 sm:pb-14 max-w-7xl mx-auto">
+        <p className={`text-[10px] sm:text-xs uppercase tracking-[0.25em] font-semibold mb-3 sm:mb-4 ${isDarkMode ? 'text-stone-500' : 'text-[#8C827A]'}`}>
+          Artisanal Fermentations & Handcrafted Formulations
+        </p>
+        <h1 className="text-3xl sm:text-6xl lg:text-7xl font-light tracking-[-0.03em] leading-[1.1] max-w-4xl">
+          Thoughtfully created products built with <span className={`italic font-normal ${isDarkMode ? 'text-amber-400' : 'text-[#C4883A]'}`}>precision & care.</span>
+        </h1>
+      </section>
+
       {/* Catalog Filters */}
-      <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pt-12 pb-8 sm:pb-10">
+      <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pb-8 sm:pb-10">
         <div className={`flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b pb-6 ${isDarkMode ? 'border-stone-800' : 'border-[#E8E4DC]'}`}>
           <div className="flex flex-wrap items-center gap-2">
             {CATEGORIES.map((cat) => (
