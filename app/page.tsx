@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 import { generateInvoicePdf } from '../lib/generatePdf';
-import LuxuryStoryHero from '../components/LuxuryStoryHero';
+import EditorialHero from '../components/EditorialHero';
 
 interface Product {
   id: number;
@@ -96,7 +96,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Ziel King Coconut Wine',
     category: 'Wines',
     price: 32.0,
-    stockQty: 4, // Shows "Only 4 left"
+    stockQty: 4, // Triggers "Only 4 left"
     tagline: 'Batch No. 04 — Artisanal Fermentation',
     description:
       'Slow-fermented naturally from fresh king coconut nectar. Features rich floral aromatics, subtle caramel warmth, and a smooth, balanced crisp finish. Best served chilled.',
@@ -138,7 +138,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Botanical Cold-Process Soap',
     category: 'Soaps',
     price: 10.0,
-    stockQty: 3, // Shows "Only 3 left"
+    stockQty: 3, // Triggers "Only 3 left"
     tagline: 'Natural Oils & Hydrating Lipids',
     description:
       'Handcrafted moisturizing soap made with virgin coconut oil, essential botanical extracts, and rich nourishing lipids for gentle daily skin cleansing.',
@@ -158,7 +158,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Reserve Coconut Vintage Wine',
     category: 'Wines',
     price: 48.0,
-    stockQty: 2, // Shows "Only 2 left"
+    stockQty: 2, // Triggers "Only 2 left"
     tagline: 'Aged 12 Months — Limited Edition',
     description:
       'A premium limited-edition reserve vintage aged in oak casks for 12 months. Delivers complex notes of toasted coconut, vanilla, and oak undertones.',
@@ -178,7 +178,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Industrial Hand Cleanser Bar',
     category: 'Soaps',
     price: 12.0,
-    stockQty: 40, // Above 5 -> Hidden
+    stockQty: 40,
     tagline: 'Exfoliating Pumice & Citrus Oil',
     description:
       'Heavy-duty exfoliating bar infused with organic orange peel oils and fine volcanic pumice. Effortlessly dissolves inks, paints, and heavy grime.',
@@ -197,7 +197,7 @@ const INITIAL_PRODUCTS: Product[] = [
     name: 'Ziel Store Signature Gift Set',
     category: 'Sets',
     price: 65.0,
-    stockQty: 18, // Above 5 -> Hidden
+    stockQty: 18,
     tagline: 'Artisanal Wine & Cleanser Duo',
     description:
       'Our flagship signature bundle featuring 1 bottle of Batch No. 04 King Coconut Wine alongside 2 bars of handcrafted Ziel soaps in custom gift packaging.',
@@ -822,7 +822,7 @@ export default function Home() {
     }
   };
 
-  // Dynamic Light / Dark Color Variables
+  // Dynamic Theme Colors
   const bgMain = isDarkMode ? 'bg-[#141413] text-[#F0EFEA]' : 'bg-[#FAF9F5] text-[#1C1B1A]';
   const headerBg = isDarkMode ? 'bg-[#141413]/85 border-stone-800' : 'bg-[#FAF9F5]/90 border-[#E8E4DC]';
   const subBannerBg = isDarkMode ? 'bg-stone-900 border-stone-800 text-stone-400' : 'bg-[#F2EFE9] border-[#E8E4DC] text-[#78716A]';
@@ -835,8 +835,8 @@ export default function Home() {
 
   return (
     <main className={`min-h-screen ${bgMain} font-sans antialiased transition-colors duration-300 selection:bg-stone-300 selection:text-stone-900 scroll-smooth`}>
-      {/* 3D Story Entrance */}
-      <LuxuryStoryHero onExplore={scrollToCatalog} />
+      {/* High-Energy Editorial Showcase Hero */}
+      <EditorialHero onExplore={scrollToCatalog} />
 
       <div id="catalog-start" />
 
@@ -847,7 +847,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Top Banner */}
+      {/* Top Notice Banner */}
       <div className={`py-2 px-4 text-center text-[10px] uppercase font-mono tracking-widest border-b ${subBannerBg}`}>
         Batch No. 04 Now Available • Worldwide Air Export & Islandwide Delivery
       </div>
@@ -875,7 +875,7 @@ export default function Home() {
         </nav>
 
         <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-          {/* Day & Night Theme Button */}
+          {/* Day & Night Mode Switch */}
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             title="Toggle Light / Dark Mode"
@@ -939,18 +939,8 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Hero Headline */}
-      <section className="px-6 sm:px-12 pt-12 sm:pt-20 pb-10 sm:pb-12 max-w-7xl mx-auto">
-        <p className={`text-[10px] sm:text-xs uppercase tracking-[0.25em] font-semibold mb-3 sm:mb-4 ${isDarkMode ? 'text-stone-500' : 'text-[#8C827A]'}`}>
-          Artisanal Fermentations & Handcrafted Formulations
-        </p>
-        <h2 className="text-3xl sm:text-6xl lg:text-7xl font-light tracking-[-0.03em] leading-[1.1] max-w-4xl">
-          Thoughtfully created products built with <span className={`italic font-normal ${isDarkMode ? 'text-amber-400' : 'text-[#C4883A]'}`}>precision & care.</span>
-        </h2>
-      </section>
-
       {/* Catalog Filters */}
-      <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pb-8 sm:pb-10">
+      <section id="works" className="px-6 sm:px-12 max-w-7xl mx-auto pt-12 pb-8 sm:pb-10">
         <div className={`flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 border-b pb-6 ${isDarkMode ? 'border-stone-800' : 'border-[#E8E4DC]'}`}>
           <div className="flex flex-wrap items-center gap-2">
             {CATEGORIES.map((cat) => (
@@ -1059,7 +1049,6 @@ export default function Home() {
                           {product.category}
                         </span>
 
-                        {/* Scarcity Low Stock Pill (Only shown when < 5) */}
                         {isLowStock && (
                           <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded-md backdrop-blur-md bg-amber-500/20 text-amber-500 border border-amber-500/40 animate-pulse">
                             Only {product.stockQty} left
@@ -1349,7 +1338,6 @@ export default function Home() {
                     {activeProduct.category}
                   </span>
 
-                  {/* Stock State Badge (Hides number unless < 5) */}
                   {activeProduct.stockQty > 0 && activeProduct.stockQty < 5 ? (
                     <span className="text-[10px] uppercase font-mono font-bold tracking-widest px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-500 border border-amber-500/40 animate-pulse">
                       Low Stock • Only {activeProduct.stockQty} left
@@ -1964,7 +1952,7 @@ export default function Home() {
                     </select>
                   </div>
 
-                  {/* Hatton National Bank Transfer Details with Copy Action */}
+                  {/* Hatton National Bank Transfer Details with 1-Click Copy */}
                   {shippingForm.paymentMethod === 'bank' && (
                     <div className={`p-4 rounded-2xl border text-xs font-mono space-y-3 ${
                       isDarkMode
