@@ -14,22 +14,21 @@ jobs:
           SUPABASE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
           if [ -z "$SUPABASE_KEY" ]; then
-            echo "ERROR: NEXT_PUBLIC_SUPABASE_ANON_KEY is missing in GitHub repository secrets!"
+            echo "ERROR: NEXT_PUBLIC_SUPABASE_ANON_KEY secret is not set in GitHub settings"
             exit 1
           fi
 
-          URL="https://iozvmawlfanivrgvaedc.supabase.co/rest/v1/products?select=id&limit=1"
-
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X GET "$URL" \
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X GET \
+            "https://iozvmawlfanivrgvaedc.supabase.co/rest/v1/products?select=id&limit=1" \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY")
 
-          echo "Response code: $HTTP_CODE"
+          echo "Supabase HTTP code: $HTTP_CODE"
 
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
             echo "Keep-alive ping successful. Timer reset!"
             exit 0
           else
-            echo "Failed with HTTP status $HTTP_CODE"
+            echo "Unexpected HTTP status: $HTTP_CODE"
             exit 1
           fi
