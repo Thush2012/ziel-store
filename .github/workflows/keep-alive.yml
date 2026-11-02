@@ -2,16 +2,34 @@ name: Supabase Keep Alive
 
 on:
   schedule:
-    # Runs at 00:00 UTC every 3 days
     - cron: '0 0 */3 * *'
-  workflow_dispatch: # Allows manual trigger anytime from GitHub UI
+  workflow_dispatch:
 
 jobs:
   ping-db:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Supabase Database
+        env:
+          SUPABASE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
-          curl -s -X GET "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/products?select=id&limit=1" \
-            -H "apikey: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}"
+          if [ -z "$SUPABASE_KEY" ]; then
+            echo "ERROR: NEXT_PUBLIC_SUPABASE_ANON_KEY is missing in GitHub repository secrets!"
+            exit 1
+          fi
+
+          URL="https://iozvmawlfanivrgvaedc.supabase.co/rest/v1/products?select=id&limit=1"
+
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X GET "$URL" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY")
+
+          echo "Response code: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "Keep-alive ping successful. Timer reset!"
+            exit 0
+          else
+            echo "Failed with HTTP status $HTTP_CODE"
+            exit 1
+          fi
